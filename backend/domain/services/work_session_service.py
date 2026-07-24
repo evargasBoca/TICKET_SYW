@@ -5,6 +5,7 @@ import uuid
 
 from backend.domain.entities.work_session import WorkSession, MAX_DAILY_MINUTES, EDIT_WINDOW_DAYS
 from backend.domain.errors import DomainError
+from backend.domain.services import sla_service
 
 
 class WorkSessionValidationError(DomainError):
@@ -100,7 +101,9 @@ class WorkSessionService:
               created_by: uuid.UUID, work_sessions_repo, tickets_repo,
               duration_minutes: Optional[int] = None, started_at: Optional[datetime] = None,
               ended_at: Optional[datetime] = None, note: Optional[str] = None,
-              allow_any: bool = False, is_task: bool = False, resources_repo=None) -> WorkSession:
+              allow_any: bool = False, is_task: bool = False, resources_repo=None,
+              resource=None, holidays: Optional[list] = None,
+              schedule_slots: Optional[list] = None, absences: Optional[list] = None) -> WorkSession:
         resolved_duration = self.resolve_duration(
             started_at=started_at, ended_at=ended_at, duration_minutes=duration_minutes)
         self.validate_duration(resolved_duration)
@@ -109,10 +112,15 @@ class WorkSessionService:
                                      is_task=is_task, resources_repo=resources_repo)
         self.assert_ticket_open_or_admin(ticket, allow_any)
         self.assert_daily_limit(resource_id, work_date, resolved_duration, work_sessions_repo)
+        # spec 028, US6/OBS-0036 (FR-020): `resource`/calendario son opcionales — sin ellos
+        # queda `off_hours=False` (mismo fallback FR-016 de sla_service, nunca bloquea el alta).
+        off_hours = sla_service.is_off_hours(
+            resource, work_date, holidays, schedule_slots, absences,
+            started_at=started_at, ended_at=ended_at)
         work_session = WorkSession.create(
             resource_id=resource_id, ticket_id=ticket.id, work_date=work_date,
             duration_minutes=resolved_duration, created_by=created_by, note=note,
-            started_at=started_at, ended_at=ended_at,
+            started_at=started_at, ended_at=ended_at, off_hours=off_hours,
         )
         return work_sessions_repo.create(work_session)
 

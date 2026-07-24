@@ -8,6 +8,9 @@ export interface WorkSessionListItem {
   duration_minutes: number
   started_at: string | null
   ended_at: string | null
+  /** spec 028, US6/OBS-0036: true si el registro cae total o parcialmente fuera del horario
+   * laboral del recurso — informativo, nunca bloqueó el alta. */
+  off_hours: boolean
   note: string | null
   created_by: string
   updated_by: string | null

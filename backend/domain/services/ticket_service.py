@@ -19,6 +19,21 @@ class TicketValidationError(DomainError):
     default_status_code = 400
 
 
+# Rangos Unicode de emojis/pictogramas (spec 028, OBS-0034) — letras (incl. acentos/ñ), números
+# y puntuación común quedan permitidos sin restricción; solo se bloquean estos rangos.
+_EMOJI_RANGES = (
+    (0x1F300, 0x1FAFF),  # símbolos/pictogramas misceláneos, transporte, símbolos suplementarios y extensión-A
+    (0x2600, 0x27BF),    # símbolos misceláneos + dingbats (☀-➿, incluye ✅❌⭐ etc.)
+    (0x1F1E6, 0x1F1FF),  # indicadores regionales (banderas de país)
+    (0xFE0F, 0xFE0F),    # variation selector-16 (fuerza presentación emoji sobre el carácter previo)
+    (0x200D, 0x200D),    # zero-width joiner (compone emojis, ej. familia/profesiones)
+)
+
+
+def _contains_emoji(text: str) -> bool:
+    return any(any(start <= ord(ch) <= end for start, end in _EMOJI_RANGES) for ch in text)
+
+
 # Campos editables por PATCH (subconjunto; el resto nunca se edita por esa vía)
 PATCHABLE_FIELDS = {
     "title", "description", "ticket_type", "priority", "severity",
@@ -35,6 +50,17 @@ _ENUMS = {
 
 
 class TicketService:
+    def validate_title(self, raw_title) -> str:
+        """OBS-0033/OBS-0034 (spec 028): recorta espacios y rechaza título vacío o con emojis.
+        Usado tanto en creación (`TicketList.post`) como en edición (`validate_patch`) — el título
+        no debe poder degradarse a inválido después de creado."""
+        title = str(raw_title or "").strip()
+        if not title:
+            raise TicketValidationError("title_blank", "El título es obligatorio")
+        if _contains_emoji(title):
+            raise TicketValidationError("title_invalid_chars", "El título no admite emojis")
+        return title
+
     def validate_enums(self, data: dict) -> None:
         for field_name, allowed in _ENUMS.items():
             if field_name in data and data[field_name] is not None and data[field_name] not in allowed:
@@ -165,6 +191,8 @@ class TicketService:
                 f"Campo(s) bloqueado(s) en el estado actual: {', '.join(sorted(locked))}",
                 locked_fields=sorted(locked))
         self.validate_enums(data)
+        if "title" in data:
+            data["title"] = self.validate_title(data["title"])
         if "estimated_resolution_minutes" in data and data["estimated_resolution_minutes"] is not None:
             try:
                 value = int(data["estimated_resolution_minutes"])

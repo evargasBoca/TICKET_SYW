@@ -16,7 +16,7 @@ parámetros nuevos de `compute_consumed_seconds`/`compute_state` son opcionales 
 sin ellos se preserva el wall-clock puro original, sin romper llamadores no migrados todavía.
 """
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -141,6 +141,68 @@ def compute_available_seconds(resource, from_dt: datetime, to_dt: datetime,
     return total_seconds
 
 
+_WORK_PERIOD_SEARCH_LIMIT_DAYS = 30
+
+
+def next_work_period_start(resource, from_dt: datetime, holidays: list | None = None,
+                           schedule_slots: list | None = None,
+                           absences: list | None = None) -> datetime:
+    """Inicio de la próxima jornada laboral disponible de `resource` en o después de `from_dt`
+    (spec 028, FR-005/OBS-0040) — "inicio de la jornada laboral aplicable" a mostrar en el
+    detalle del ticket. Si `from_dt` ya cae dentro de un intervalo disponible, devuelve el
+    inicio de ESE intervalo (no `from_dt`); reutiliza `_day_available_intervals`, mismo criterio
+    de disponibilidad que `compute_available_seconds`. Sin timezone/país configurados, o si no
+    se encuentra ningún intervalo disponible dentro de `_WORK_PERIOD_SEARCH_LIMIT_DAYS`, devuelve
+    `from_dt` sin modificar (mismo fallback de FR-016)."""
+    if resource is None or (not resource.timezone and not resource.calendar_country):
+        return from_dt
+
+    local_from = _local_time_at(resource, from_dt)
+    tzinfo = local_from.tzinfo
+    day = local_from.date()
+    for _ in range(_WORK_PERIOD_SEARCH_LIMIT_DAYS):
+        for start, end in _day_available_intervals(resource, day, holidays or [],
+                                                    schedule_slots or [], absences or []):
+            interval_start = datetime.combine(day, start, tzinfo=tzinfo)
+            interval_end = datetime.combine(day, end, tzinfo=tzinfo)
+            if interval_end > local_from:
+                candidate = max(interval_start, local_from)
+                return candidate.astimezone(timezone.utc)
+        day += timedelta(days=1)
+    return from_dt
+
+
+def resource_local_now(resource, now: Optional[datetime] = None) -> datetime:
+    """Instante actual convertido al huso horario de `resource` (spec 028, US6/OBS-0036) — evita
+    fijar `work_date` a la fecha del servidor (Docker corre en UTC) cuando el recurso está en
+    otro huso y registra tiempo cerca de medianoche local. Sin `resource`/`timezone`, devuelve
+    `now` sin convertir (mismo fallback de FR-016)."""
+    return _local_time_at(resource, now or datetime.now(timezone.utc))
+
+
+def is_off_hours(resource, work_date: date, holidays: list | None = None,
+                 schedule_slots: list | None = None, absences: list | None = None,
+                 started_at: Optional[datetime] = None, ended_at: Optional[datetime] = None) -> bool:
+    """Clasifica un registro de tiempo como "fuera de jornada" (spec 028, US6/OBS-0036, FR-020):
+    `True` si el intervalo `[started_at, ended_at]` cae total o parcialmente fuera del horario
+    disponible del recurso, o -sin horas explícitas- si `work_date` completo no tiene ningún
+    intervalo disponible (fin de semana/feriado/ausencia de día completo). Nunca bloquea el
+    registro (FR-020/FR-021), es puramente informativo. Sin timezone/país configurados no hay
+    forma de evaluar (FR-016): se asume dentro de jornada."""
+    if resource is None or (not resource.timezone and not resource.calendar_country):
+        return False
+    holidays = holidays or []
+    schedule_slots = schedule_slots or []
+    absences = absences or []
+    if started_at is not None and ended_at is not None:
+        total = (ended_at - started_at).total_seconds()
+        if total <= 0:
+            return False
+        available = compute_available_seconds(resource, started_at, ended_at, holidays, schedule_slots, absences)
+        return available < total
+    return not _day_available_intervals(resource, work_date, holidays, schedule_slots, absences)
+
+
 def compute_consumed_seconds(ticket, now: datetime, resource=None, holidays: list | None = None,
                              schedule_slots: list | None = None, absences: list | None = None) -> int:
     consumed = ticket.sla_consumed_seconds or 0
@@ -232,15 +294,24 @@ def compute_state(ticket, now: datetime, resource=None, holidays: list | None = 
     }
 
 
-def apply_transition(ticket, new_status: str, now: datetime, sla_rule_repo) -> Optional[dict]:
+def apply_transition(ticket, new_status: str, now: datetime, sla_rule_repo, resource=None,
+                     holidays: list | None = None, schedule_slots: list | None = None,
+                     absences: list | None = None) -> Optional[dict]:
     """Efecto lateral de una transición de estado FSM sobre el snapshot de SLA vigente
     (FR-004b/FR-005/FR-006). Devuelve un dict de columnas `sla_*` a persistir, o `None` si el
     ticket no tiene SLA configurado (nada que actualizar).
+
+    `resource`/`holidays`/`schedule_slots`/`absences` (spec 022/028, opcionales, mismo criterio
+    que `compute_state`): sin ellos, el consumo que esta función congela/persiste cae a
+    wall-clock puro, igual que antes de spec 028 — con ellos, usa el motor dinámico de
+    disponibilidad (`compute_available_seconds`), cerrando el hallazgo OBS-0038/OBS-0039 (el
+    snapshot persistido por una transición de estado quedaba desalineado del wall-clock-consciente
+    que ya usaba `compute_state` en la lectura).
     """
     if ticket.sla_rule_id is None and ticket.sla_phase is None:
         return None
 
-    consumed = compute_consumed_seconds(ticket, now)
+    consumed = compute_consumed_seconds(ticket, now, resource, holidays, schedule_slots, absences)
     previous_phase = ticket.sla_phase
 
     if new_status == "pendiente_usuario":

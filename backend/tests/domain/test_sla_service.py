@@ -1,9 +1,11 @@
 """Motor de dominio del SLA (spec 014, Historia 2) — dominio puro, sin DB."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 import uuid
 
 import pytest
 
+from backend.domain.entities.calendar import WorkScheduleSlot
+from backend.domain.entities.resource import Resource
 from backend.domain.entities.sla_rule import SlaRule
 from backend.domain.entities.ticket import Ticket
 from backend.domain.services import sla_service
@@ -155,6 +157,74 @@ def test_transition_no_op_when_no_sla_configured():
     ticket = _ticket(status="nuevo", sla_phase=None, sla_rule_id=None)
     updates = sla_service.apply_transition(ticket, "pre_analisis", NOW, _FakeSlaRuleRepo({}))
     assert updates is None
+
+
+# ── apply_transition con calendario (spec 028, OBS-0038/OBS-0039) ───────────
+
+_RESOURCE_ID = uuid.uuid4()
+_SLOTS = [WorkScheduleSlot.create(_RESOURCE_ID, weekday=d, start_time=time(8, 0), end_time=time(17, 0))
+         for d in range(5)]  # lunes a viernes, 08:00-17:00
+
+
+def _resource(**overrides) -> Resource:
+    defaults = dict(id=_RESOURCE_ID, full_name="Resolutor", email="r@sywork.net",
+                    timezone="UTC", calendar_country="CO")
+    defaults.update(overrides)
+    return Resource(**defaults)
+
+
+def test_transition_with_resource_consumes_calendar_time_not_wall_clock():
+    """OBS-0038: cambiar de estado no debe inflar el consumo con tiempo fuera de horario. Miércoles
+    16:00 (dentro de jornada) -> jueves 09:05: real disponible = 1h (mié 16-17h) + 1h05 (jue 8-9:05)
+    = 7500s, muy por debajo de las ~17h05 (61500s) de wall-clock puro que se calculaba antes."""
+    resource = _resource()
+    last_resume = datetime(2026, 7, 15, 16, 0, tzinfo=timezone.utc)  # miércoles
+    now = datetime(2026, 7, 16, 9, 5, tzinfo=timezone.utc)  # jueves
+    ticket = _ticket(
+        status="en_ejecucion", sla_phase="ejecucion", sla_phase_limit_minutes=480,
+        sla_consumed_seconds=0, sla_last_resume_at=last_resume, sla_status="corriendo",
+    )
+    updates = sla_service.apply_transition(
+        ticket, "pendiente_usuario", now, _FakeSlaRuleRepo({}),
+        resource=resource, schedule_slots=_SLOTS, holidays=[], absences=[])
+    assert updates["sla_consumed_seconds"] == 7500
+    assert updates["sla_consumed_seconds"] < int((now - last_resume).total_seconds())
+
+
+def test_transition_without_resource_keeps_wall_clock_fallback():
+    """Sin resource (parámetros opcionales, spec 022/028 Decisión 10): se preserva el
+    comportamiento wall-clock original — no rompe llamadores no migrados."""
+    last_resume = datetime(2026, 7, 15, 16, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 16, 9, 5, tzinfo=timezone.utc)
+    ticket = _ticket(
+        status="en_ejecucion", sla_phase="ejecucion", sla_phase_limit_minutes=480,
+        sla_consumed_seconds=0, sla_last_resume_at=last_resume, sla_status="corriendo",
+    )
+    updates = sla_service.apply_transition(ticket, "pendiente_usuario", now, _FakeSlaRuleRepo({}))
+    assert updates["sla_consumed_seconds"] == int((now - last_resume).total_seconds())
+
+
+# ── next_work_period_start (spec 028, FR-005/OBS-0040) ───────────────────────
+
+def test_next_work_period_start_delays_ticket_created_outside_hours():
+    """Un ticket creado fuera de horario (miércoles 23:00) debe mostrar como inicio de jornada
+    el jueves 08:00, no la hora de creación."""
+    resource = _resource()
+    created_at = datetime(2026, 7, 15, 23, 0, tzinfo=timezone.utc)  # miércoles 23:00
+    start = sla_service.next_work_period_start(resource, created_at, [], _SLOTS, [])
+    assert start == datetime(2026, 7, 16, 8, 0, tzinfo=timezone.utc)  # jueves 08:00
+
+
+def test_next_work_period_start_within_hours_returns_same_instant():
+    resource = _resource()
+    created_at = datetime(2026, 7, 15, 10, 30, tzinfo=timezone.utc)  # miércoles, ya en jornada
+    start = sla_service.next_work_period_start(resource, created_at, [], _SLOTS, [])
+    assert start == created_at
+
+
+def test_next_work_period_start_without_resource_returns_input_unchanged():
+    created_at = datetime(2026, 7, 15, 23, 0, tzinfo=timezone.utc)
+    assert sla_service.next_work_period_start(None, created_at) == created_at
 
 
 # ── compute_state (cálculo perezoso, solo lectura) ───────────────────────────

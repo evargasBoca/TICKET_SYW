@@ -161,6 +161,64 @@ def test_timer_requires_authentication(anon_client):
     assert response.status_code == 401
 
 
+# ── OBS-0035 (spec 028) — ticket cerrado bloquea/detiene el cronómetro ─────────────────────
+
+def _comment(client, ticket_id, comment_type, body="avance"):
+    return client.post(f"/api/tickets/{ticket_id}/comments",
+                       json={"comment_type": comment_type, "body": body})
+
+
+def test_start_rejects_already_closed_ticket(client, make_ticket, ticket_resource, resolver_auth):
+    """Antes solo `finish()` rechazaba un ticket cerrado; `start()` lo permitía y fallaba
+    confusamente recién al terminar. Ahora se rechaza desde el inicio."""
+    ticket = make_ticket()
+    _assign(client, ticket["id"], ticket_resource["id"])
+    from backend.infra.database import get_db
+    from backend.infra.repositories.ticket_repo import TicketRepository
+    TicketRepository(get_db()).update_fields(ticket["id"], status="cerrado")
+
+    response = client.post("/api/timer/start", json={"ticket_id": ticket["id"]}, headers=resolver_auth)
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "ticket_closed"
+
+
+def test_closing_ticket_auto_stops_active_timer_and_persists_time(
+        client, make_ticket, ticket_resource, resolver_auth):
+    """Cerrar un ticket con el cronómetro corriendo lo detiene solo, persiste el tiempo ya
+    acumulado como WorkSession (que además cuenta para el chequeo OBS-0026 de tiempo
+    registrado), y a partir de ahí no admite nuevos registros."""
+    ticket = make_ticket()
+    tid = ticket["id"]
+    _assign(client, tid, ticket_resource["id"])
+    started = client.post("/api/timer/start", json={"ticket_id": tid}, headers=resolver_auth)
+    assert started.status_code == 201, started.get_json()
+    _rewind_started_at(ticket_resource["id"], minutes=5)
+
+    _comment(client, tid, "confirmacion_atencion", "Contacté al usuario")
+    _comment(client, tid, "termina_analisis", "Diagnóstico")
+    _comment(client, tid, "solicitud_cierre", "Se aplicó la solución")
+    client.post(f"/api/tickets/{tid}/resolution", json={"accepted": True})
+
+    items = client.get("/api/catalogs/resolution-types").get_json()["items"]
+    resolution_type_id = next(i for i in items if not i["allow_zero_time"])["id"]
+    closed = client.post(f"/api/tickets/{tid}/close", json={
+        "resolution_type_id": resolution_type_id, "body": "Se cerró con cronómetro activo",
+    })
+    assert closed.status_code == 200, closed.get_json()
+
+    timer_state = client.get("/api/timer", headers=resolver_auth)
+    assert timer_state.get_json()["status"] == "inactive"
+
+    listing = client.get("/api/work-sessions", headers=resolver_auth)
+    matching = [item for item in listing.get_json()["items"] if item["ticket_id"] == tid]
+    assert matching, "se esperaba una WorkSession auto-creada al cerrar"
+    assert matching[0]["duration_minutes"] >= 5
+
+    blocked = client.post("/api/timer/start", json={"ticket_id": tid}, headers=resolver_auth)
+    assert blocked.status_code == 409
+    assert blocked.get_json()["error"] == "ticket_closed"
+
+
 # ── US2 — persistencia entre recargas/sesiones (Escenario 2 del quickstart) ────────────────
 
 def test_running_timer_survives_reload_and_new_session(client, make_ticket, ticket_resource,

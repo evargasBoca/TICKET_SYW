@@ -22,13 +22,17 @@ class WorkSession:
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     updated_by: Optional[uuid.UUID] = None
+    # spec 028, US6/OBS-0036 (FR-020): True si el registro cae total o parcialmente fuera del
+    # horario laboral del recurso — puramente informativo, nunca bloquea la creación.
+    off_hours: bool = False
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
     @classmethod
     def create(cls, resource_id: uuid.UUID, ticket_id: uuid.UUID, work_date: date,
                duration_minutes: int, created_by: uuid.UUID, note: Optional[str] = None,
-               started_at: Optional[datetime] = None, ended_at: Optional[datetime] = None) -> "WorkSession":
+               started_at: Optional[datetime] = None, ended_at: Optional[datetime] = None,
+               off_hours: bool = False) -> "WorkSession":
         return cls(
             id=uuid.uuid4(),
             resource_id=resource_id,
@@ -39,6 +43,7 @@ class WorkSession:
             created_by=created_by,
             started_at=started_at,
             ended_at=ended_at,
+            off_hours=off_hours,
         )
 
 

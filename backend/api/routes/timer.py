@@ -5,7 +5,7 @@ tiempo — no se crea un permiso nuevo). El `resource_id` efectivo se resuelve *
 usuario autenticado; a diferencia de `work_sessions`, ningún endpoint acepta `resource_id` en
 query/body — el cronómetro es personal, sin variante "para otro recurso" (FR-005).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import g, request
 from flask_restx import Namespace, Resource, fields
@@ -15,6 +15,9 @@ from backend.api.routes._shared import parse_uuid, error_model, server_error
 from backend.domain.errors import DomainError
 from backend.domain.services.ticket_timer_service import TicketTimerService, STALE_THRESHOLD_SECONDS
 from backend.infra.database import get_db
+from backend.infra.repositories.calendar_repo import (
+    AbsenceRequestRepository, HolidayRepository, resolve_effective_schedule_slots,
+)
 from backend.infra.repositories.catalog_repo import CatalogRepository
 from backend.infra.repositories.resource_repo import ResourceRepository
 from backend.infra.repositories.ticket_repo import TicketRepository
@@ -57,6 +60,18 @@ def _resolve_resource(db):
     if not resource:
         raise DomainError("no_resource_profile", "El usuario no tiene un recurso asociado", status_code=400)
     return resource
+
+
+def _resolve_calendar_context(db, resource) -> dict:
+    """Mismo criterio que `tickets.py::_resolve_sla_context` (spec 028, US6/OBS-0036) — resuelve
+    la fecha local del recurso y clasifica el registro generado por `/finish` como fuera de
+    jornada, sin bloquear la creación."""
+    now = datetime.now(timezone.utc)
+    holidays = HolidayRepository(db).list_by_country(resource.calendar_country) if resource.calendar_country else []
+    schedule_slots = resolve_effective_schedule_slots(db, resource)
+    absences = AbsenceRequestRepository(db).list_approved_between(
+        resource.id, now.date() - timedelta(days=1), now.date() + timedelta(days=1))
+    return {"resource": resource, "holidays": holidays, "schedule_slots": schedule_slots, "absences": absences}
 
 
 def _serialize(timer, db) -> dict:
@@ -105,7 +120,8 @@ class TimerStart(Resource):
     @ns.response(401, "No autenticado", _error)
     @ns.response(403, "Sin permiso work_sessions:manage, o el recurso no participa del ticket", _error)
     @ns.response(404, "Ticket no encontrado", _error)
-    @ns.response(409, "Ya hay un cronómetro activo en otro ticket (timer_already_active)", _error)
+    @ns.response(409, "Ya hay un cronómetro activo en otro ticket (timer_already_active), o el "
+                      "ticket ya está cerrado (ticket_closed, spec 028/OBS-0035)", _error)
     @ns.response(500, "Error interno del servidor", _error)
     @require_permission("work_sessions", "manage")
     def post(self):
@@ -203,6 +219,7 @@ class TimerFinish(Resource):
                 timer_repo=TicketTimerRepository(db), tickets_repo=TicketRepository(db),
                 work_sessions_repo=WorkSessionRepository(db), note=data.get("note"),
                 is_task=is_task, resources_repo=ResourceRepository(db),
+                calendar_context=_resolve_calendar_context(db, resource),
             )
             from backend.api.routes.work_sessions import _serialize as _serialize_work_session
             return _serialize_work_session(work_session, db), 201, \

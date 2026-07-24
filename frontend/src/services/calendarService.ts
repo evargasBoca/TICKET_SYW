@@ -40,6 +40,17 @@ export const calendarService = {
       headers: opts.skipErrorNotify ? { 'X-Skip-Error-Notify': 'true' } : undefined,
     }).then(r => r.data.items),
 
+  /** Ausencias de un recurso puntual (spec 028, OBS-0037 — calendario de Equipo), sin
+   * limitarse a subordinados propios. Requiere `absence_requests:view_all` (rol RRHH) en el
+   * backend — se usa siempre con `skipErrorNotify` porque un 403 es el resultado esperado
+   * para la mayoría de los roles que sí pueden ver este calendario (ej. Coordinador), no un
+   * error que deba interrumpir la carga del resto del calendario. */
+  listAbsenceRequestsForResource: (resourceId: string) =>
+    apiClient.get<{ items: AbsenceRequest[] }>('/api/absence-requests', {
+      params: { resource_id: resourceId },
+      headers: { 'X-Skip-Error-Notify': 'true' },
+    }).then(r => r.data.items),
+
   /** Con `files`, se envía como `multipart/form-data` (mismo criterio que `ticketService.create`). */
   createAbsenceRequest: (data: AbsenceRequestFormData, files: File[] = []) => {
     if (files.length === 0) {

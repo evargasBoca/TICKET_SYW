@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Date, ForeignKey, Integer, Text, TIMESTAMP
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func, text
 from backend.infra.models import Base
@@ -17,6 +17,7 @@ class WorkSessionModel(Base):
     note = Column(Text, nullable=True)
     started_at = Column(TIMESTAMP(timezone=True), nullable=True)
     ended_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    off_hours = Column(Boolean, nullable=False, server_default=text("false"))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     updated_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -35,6 +36,7 @@ class WorkSessionModel(Base):
             started_at=self.started_at,
             ended_at=self.ended_at,
             updated_by=self.updated_by,
+            off_hours=self.off_hours,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )
@@ -52,6 +54,7 @@ class WorkSessionModel(Base):
             started_at=work_session.started_at,
             ended_at=work_session.ended_at,
             updated_by=work_session.updated_by,
+            off_hours=work_session.off_hours,
         )
 
 

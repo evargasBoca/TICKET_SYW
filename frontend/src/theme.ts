@@ -52,6 +52,8 @@ export const CALENDAR_CATEGORY_COLORS = {
   oficial: palette.teal700,
   regional_religioso: palette.violet500,
   cumpleanos: palette.lime600,
+  // spec 028, OBS-0037: ausencias/permisos en el calendario de Equipo.
+  ausencia: palette.amber600,
 }
 
 export const STATUS_COLORS = {

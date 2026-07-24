@@ -4,7 +4,7 @@ Todas exigen JWT + permiso del módulo `work_sessions`. Un recurso sin `view_all
 solo puede ver/gestionar sus propios registros — el `resource_id` efectivo se resuelve del
 usuario autenticado, nunca se confía en lo que envía el cliente salvo para Admin.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import uuid
 
 from flask import g, request
@@ -15,10 +15,27 @@ from backend.api.routes._shared import parse_uuid, error_model, server_error
 from backend.domain.errors import DomainError
 from backend.domain.services.work_session_service import WorkSessionService
 from backend.infra.database import get_db
+from backend.infra.repositories.calendar_repo import (
+    AbsenceRequestRepository, HolidayRepository, resolve_effective_schedule_slots,
+)
 from backend.infra.repositories.catalog_repo import CatalogRepository
 from backend.infra.repositories.resource_repo import ResourceRepository
 from backend.infra.repositories.ticket_repo import TicketRepository
 from backend.infra.repositories.work_session_repo import WorkSessionRepository
+
+
+def _resolve_calendar_context(db, resource) -> dict:
+    """Mismo criterio que `timer.py::_resolve_calendar_context` (spec 028, US6/OBS-0036) — sin
+    `resource` (no debería ocurrir, ver `WorkSessionList.post`), devuelve contexto vacío y
+    `off_hours` queda `False` (fallback FR-016)."""
+    if resource is None:
+        return {}
+    now = datetime.now(timezone.utc)
+    holidays = HolidayRepository(db).list_by_country(resource.calendar_country) if resource.calendar_country else []
+    schedule_slots = resolve_effective_schedule_slots(db, resource)
+    absences = AbsenceRequestRepository(db).list_approved_between(
+        resource.id, now.date() - timedelta(days=1), now.date() + timedelta(days=1))
+    return {"resource": resource, "holidays": holidays, "schedule_slots": schedule_slots, "absences": absences}
 
 
 def _is_task(ticket, db) -> bool:
@@ -65,6 +82,8 @@ _work_session_out = ns.model("WorkSession", {
     "duration_minutes": fields.Integer(),
     "started_at": fields.String(allow_null=True),
     "ended_at": fields.String(allow_null=True),
+    "off_hours": fields.Boolean(description="spec 028, US6/OBS-0036: true si el registro cae "
+                                            "total o parcialmente fuera del horario laboral del recurso"),
     "note": fields.String(allow_null=True),
     "created_by": fields.String(),
     "updated_by": fields.String(allow_null=True),
@@ -137,6 +156,7 @@ def _serialize(ws, db) -> dict:
         "duration_minutes": ws.duration_minutes,
         "started_at": ws.started_at.isoformat() if ws.started_at else None,
         "ended_at": ws.ended_at.isoformat() if ws.ended_at else None,
+        "off_hours": ws.off_hours,
         "note": ws.note,
         "created_by": str(ws.created_by),
         "updated_by": str(ws.updated_by) if ws.updated_by else None,
@@ -218,6 +238,7 @@ class WorkSessionList(Resource):
         db = get_db()
         allow_any = current_user_has("work_sessions", "manage_all")
         resource_id = None
+        resource = None
         if allow_any and data.get("resource_id"):
             resource_id = parse_uuid(data["resource_id"])
         if resource_id is None:
@@ -226,6 +247,9 @@ class WorkSessionList(Resource):
                 return {"error": "no_resource_profile",
                         "message": "El usuario no tiene un recurso asociado"}, 400
             resource_id = own.id
+            resource = own
+        else:
+            resource = ResourceRepository(db).get_by_id(resource_id)
         try:
             work_date = _parse_date(data["work_date"], "work_date")
             started_at = _parse_datetime(data.get("started_at"), "started_at")
@@ -238,6 +262,7 @@ class WorkSessionList(Resource):
                 duration_minutes=duration_minutes, created_by=g.current_user.id,
                 work_sessions_repo=WorkSessionRepository(db), tickets_repo=TicketRepository(db),
                 note=data.get("note"), started_at=started_at, ended_at=ended_at,
+                **_resolve_calendar_context(db, resource),
                 allow_any=allow_any, is_task=_is_task(ticket, db),
                 resources_repo=ResourceRepository(db),
             )

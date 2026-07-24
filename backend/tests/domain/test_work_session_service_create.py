@@ -1,8 +1,11 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
+from backend.domain.entities.calendar import WorkScheduleSlot
+from backend.domain.entities.resource import Resource
+from backend.domain.services import sla_service
 from backend.domain.services.work_session_service import (
     WorkSessionService, WorkSessionValidationError, WorkSessionAuthorizationError,
     WorkSessionConflictError,
@@ -138,3 +141,53 @@ def test_create_rejects_when_daily_limit_exceeded(svc):
     assert exc.value.code == "daily_limit_exceeded"
     assert exc.value.status_code == 400
     assert exc.value.extra["current_total_minutes"] == 1400
+
+
+# ── off_hours / fecha local del recurso (spec 028, US6/OBS-0036) ────────────
+
+_RESOURCE_ID = uuid.uuid4()
+_SLOTS = [WorkScheduleSlot.create(_RESOURCE_ID, weekday=d, start_time=time(8, 0), end_time=time(17, 0))
+         for d in range(5)]  # lunes a viernes, 08:00-17:00
+
+
+def _resource(**overrides) -> Resource:
+    defaults = dict(id=_RESOURCE_ID, full_name="Resolutor", email="r@sywork.net",
+                    timezone="America/Bogota", calendar_country="CO")
+    defaults.update(overrides)
+    return Resource(**defaults)
+
+
+def test_work_date_reflects_resource_local_date_near_midnight():
+    """OBS-0036: 2026-07-16 04:30 UTC es 2026-07-15 23:30 en Bogotá (UTC-5) — el bug fijaba
+    `work_date` a la fecha UTC del servidor (16), no a la fecha local real del recurso (15)."""
+    resource = _resource()
+    now_utc = datetime(2026, 7, 16, 4, 30, tzinfo=timezone.utc)
+    assert sla_service.resource_local_now(resource, now_utc).date() == date(2026, 7, 15)
+
+
+def test_create_marks_off_hours_true_when_full_day_unavailable(svc):
+    """Sábado 2026-07-18: sin slot configurado para ese weekday (solo L-V) -> día completo sin
+    disponibilidad, clasificado como fuera de jornada, pero igual se acepta (no se bloquea)."""
+    resource_id = uuid.uuid4()
+    ticket = FakeTicket(assignee_id=resource_id)
+    ws = svc.create(
+        resource_id=resource_id, ticket=ticket, work_date=date(2026, 7, 18), duration_minutes=30,
+        created_by=uuid.uuid4(), work_sessions_repo=FakeWorkSessionsRepo(),
+        tickets_repo=FakeTicketsRepo(), resource=_resource(id=resource_id),
+        schedule_slots=_SLOTS, holidays=[], absences=[],
+    )
+    assert ws.off_hours is True
+
+
+def test_create_marks_off_hours_false_when_within_schedule(svc):
+    """Lunes 2026-07-20: día con horario laboral configurado -> no se clasifica fuera de
+    jornada."""
+    resource_id = uuid.uuid4()
+    ticket = FakeTicket(assignee_id=resource_id)
+    ws = svc.create(
+        resource_id=resource_id, ticket=ticket, work_date=date(2026, 7, 20), duration_minutes=30,
+        created_by=uuid.uuid4(), work_sessions_repo=FakeWorkSessionsRepo(),
+        tickets_repo=FakeTicketsRepo(), resource=_resource(id=resource_id),
+        schedule_slots=_SLOTS, holidays=[], absences=[],
+    )
+    assert ws.off_hours is False

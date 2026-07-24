@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Form, Modal, Select, Space, Table, Tag, Tooltip, message } from 'antd'
+import { App, Button, Form, Modal, Select, Space, Table, Tag, Tooltip } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { slaService } from '../services/slaService'
@@ -19,6 +19,10 @@ const PRIORITY_COLORS: Record<string, string> = {
 export default function SlaRulesPage() {
   const { hasPermission } = useAuthStore()
   const canManage = hasPermission('sla_rules', 'manage')
+  // OBS-0029 (spec 028): la instancia estática `message` de 'antd' no renderizaba ningún toast
+  // en esta app (verificado con Docker real) — el `<App>` de antd que envuelve toda la
+  // aplicación (App.tsx) exige la instancia ligada al contexto vía `App.useApp()`.
+  const { message } = App.useApp()
 
   const [rules, setRules] = useState<SlaRule[]>([])
   const [projects, setProjects] = useState<ProjectListItem[]>([])

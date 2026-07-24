@@ -39,8 +39,25 @@ import type { TicketFilterCriteria } from '../store/savedFiltersStore'
 import RichTextEditor, { isRichTextEmpty } from '../components/tickets/RichTextEditor'
 import { mapApiErrorToFormFields, type FieldErrorRule } from '../services/formErrorMapper'
 
+// OBS-0034 (spec 028): mismos rangos Unicode que `backend/domain/services/ticket_service.py`
+// (`_EMOJI_RANGES`) — letras (incl. acentos/ñ), números y puntuación común quedan permitidos.
+const EMOJI_PATTERN = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}]/u
+
+const TITLE_RULES = [
+  { required: true, whitespace: true, message: 'El título es requerido' },
+  {
+    validator: (_: unknown, value: string) =>
+      value && EMOJI_PATTERN.test(value)
+        ? Promise.reject(new Error('El título no admite emojis'))
+        : Promise.resolve(),
+  },
+]
+
 // OBS-0018: asocia códigos de error de la API a los campos del formulario de creación de Ticket/Tarea.
 const TICKET_ERROR_RULES: FieldErrorRule[] = [
+  // OBS-0033/OBS-0034 (spec 028): título vacío/solo espacios o con emojis.
+  { code: 'title_blank', field: 'title' },
+  { code: 'title_invalid_chars', field: 'title' },
   { code: 'validation_error', field: 'client_id', messageIncludes: ['client_id'] },
   { code: 'validation_error', field: 'project_id', messageIncludes: ['proyecto no pertenece'] },
   { code: 'client_inactive', field: 'client_id' },
@@ -397,7 +414,7 @@ export default function TicketsPage() {
         onOk={() => form.submit()} okText="Crear ticket" width={isEncargado ? 480 : 760}>
         <Form form={form} layout="vertical" onFinish={handleCreate}
           initialValues={isEncargado ? {} : { ticket_type: 'incident', priority: 'medium', severity: 's3', escalation_level: 'n2' }}>
-          <Form.Item name="title" label="Título" rules={[{ required: true, message: 'El título es requerido' }]}>
+          <Form.Item name="title" label="Título" rules={TITLE_RULES}>
             <Input />
           </Form.Item>
           <Form.Item name="description" label="Descripción"
