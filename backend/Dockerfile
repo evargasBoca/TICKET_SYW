@@ -15,4 +15,7 @@ ENV PYTHONPATH=/repo
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "alembic upgrade head && flask run --host=0.0.0.0 --port=5000 --reload"]
+# Los seeds (idempotentes, nunca duplican) se re-ejecutan en cada arranque del contenedor para
+# que un `docker compose down -v` (borra el volumen de Postgres) no pierda clientes/proyectos/
+# equipos de prueba en ningun ambiente (dev, sywork_test, sywork_prod) — ver specs 026/029.
+CMD ["sh", "-c", "alembic upgrade head && python -m backend.scripts.seed_clients_aris_vaxthera && python -m backend.scripts.seed_dev_users && flask run --host=0.0.0.0 --port=5000 --reload"]
