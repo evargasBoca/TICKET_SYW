@@ -233,23 +233,38 @@ def _can_view_request(db, current_resource, absence_request: AbsenceRequest) -> 
 class AbsenceRequestList(Resource):
     @ns.doc("list_absence_requests", params={
         "scope": {"description": "own | manager | hr (default: own)", "type": "string"},
+        "resource_id": {"description": "UUID de un recurso puntual (spec 028, OBS-0037 — "
+                                       "calendario de Equipo); requiere el mismo permiso que "
+                                       "scope=hr, independientemente del valor de `scope`",
+                        "type": "string"},
     })
     @ns.response(200, "Listado de solicitudes de ausencia", _absence_request_list)
-    @ns.response(400, "scope inválido", _error)
+    @ns.response(400, "scope o resource_id inválido", _error)
     @ns.response(401, "No autenticado (token ausente o invalido)", _error)
     @ns.response(403, "Sin permiso para el scope solicitado", _error)
     @ns.response(500, "Error interno del servidor", _error)
     @require_authenticated()
     def get(self):
-        """Listar solicitudes de ausencia según el scope (propias, de subordinados, o todas — RRHH)."""
+        """Listar solicitudes de ausencia según el scope (propias, de subordinados, o todas —
+        RRHH), o de un recurso puntual (`resource_id`, spec 028 — mismo permiso que `scope=hr`,
+        usado por el calendario de Equipo para mostrar ausencias de cualquier recurso
+        seleccionado, no solo subordinados propios)."""
         scope = request.args.get("scope", "own")
+        resource_id_param = request.args.get("resource_id")
         if scope not in ("own", "manager", "hr"):
             return {"error": "validation_error", "message": "scope debe ser own, manager o hr"}, 400
         try:
             db = get_db()
             current_resource = _current_resource(db)
             repo = AbsenceRequestRepository(db)
-            if scope == "own":
+            if resource_id_param:
+                if not current_user_has("absence_requests", "view_all"):
+                    return _FORBIDDEN
+                target_id = parse_uuid(resource_id_param)
+                if not target_id:
+                    return {"error": "validation_error", "message": "resource_id inválido"}, 400
+                items = repo.list_by_resource(target_id)
+            elif scope == "own":
                 items = repo.list_by_resource(current_resource.id) if current_resource else []
             elif scope == "manager":
                 if not current_resource:

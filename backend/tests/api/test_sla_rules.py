@@ -88,6 +88,37 @@ def test_reject_zero_or_negative_minutes(client, sla_project):
     assert response.status_code == 400, response.get_json()
 
 
+# ── OBS-0030/OBS-0031 (spec 028) — validación explícita de mínimo y máximo ──────────────────
+
+def test_reject_minutes_above_max(client, sla_project):
+    """15 días (21600 min) es el tope; 21601 debe rechazarse con `max_exceeded`, no autocorregirse."""
+    response = client.post("/api/sla-rules", json={
+        "project_id": sla_project["id"], "priority": "critical",
+        "contact_minutes": 15, "execution_minutes": 21601,
+    })
+    assert response.status_code == 400, response.get_json()
+    assert response.get_json()["error"] == "max_exceeded"
+
+
+def test_accept_minutes_at_max_boundary(client, sla_project):
+    response = client.post("/api/sla-rules", json={
+        "project_id": sla_project["id"], "priority": "low",
+        "contact_minutes": 15, "execution_minutes": 21600,
+    })
+    assert response.status_code == 201, response.get_json()
+    assert response.get_json()["execution_minutes"] == 21600
+
+
+def test_patch_rejects_minutes_above_max(client, sla_project):
+    created = client.post("/api/sla-rules", json={
+        "project_id": sla_project["id"], "priority": "medium",
+        "contact_minutes": 15, "execution_minutes": 480,
+    }).get_json()
+    response = client.patch(f"/api/sla-rules/{created['id']}", json={"execution_minutes": 50000})
+    assert response.status_code == 400, response.get_json()
+    assert response.get_json()["error"] == "max_exceeded"
+
+
 def test_resolver_cannot_manage_sla_rules(client, sla_project, resolver_auth):
     response = client.post("/api/sla-rules", json={
         "project_id": sla_project["id"], "priority": "high",

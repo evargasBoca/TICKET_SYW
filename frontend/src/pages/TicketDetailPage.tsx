@@ -229,6 +229,7 @@ export default function TicketDetailPage() {
               <>
                 <TicketTimerWidget
                   ticketId={ticket.id}
+                  ticketStatus={ticket.status}
                   onFinished={() => setTimerFinishedCount(c => c + 1)}
                 />
                 <Divider style={{ margin: '12px 0' }} />
@@ -307,7 +308,7 @@ export default function TicketDetailPage() {
             title={<span><ClockCircleOutlined style={{ color: vivid.red.text, marginRight: 8 }} />SLA</span>}
             style={{ borderColor: palette.slate200, background: palette.slate50 }}
           >
-            <SlaCounter sla={ticket.sla} />
+            <SlaCounter sla={ticket.sla} hasAssignee={ticket.assignee != null} />
           </Card>
 
           <Card
@@ -454,6 +455,21 @@ export default function TicketDetailPage() {
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label="Creado">{new Date(ticket.created_at).toLocaleString('es-CO')}</Descriptions.Item>
+              {ticket.assignments.length > 0 && (
+                <Descriptions.Item label="Asignado">
+                  {new Date(ticket.assignments[ticket.assignments.length - 1].created_at).toLocaleString('es-CO')}
+                </Descriptions.Item>
+              )}
+              {ticket.work_period_start && (
+                <Descriptions.Item label="Inicio de jornada laboral">
+                  {new Date(ticket.work_period_start).toLocaleString('es-CO')}
+                </Descriptions.Item>
+              )}
+              {ticket.sla_effective_start && (
+                <Descriptions.Item label="Inicio efectivo del SLA">
+                  {new Date(ticket.sla_effective_start).toLocaleString('es-CO')}
+                </Descriptions.Item>
+              )}
               {ticket.resolved_at && (
                 <Descriptions.Item label="Resuelto">{new Date(ticket.resolved_at).toLocaleString('es-CO')}</Descriptions.Item>
               )}

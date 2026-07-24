@@ -11,6 +11,11 @@ SLA_STATUSES = ("sin_sla", "corriendo", "pausado", "vencido", "detenido")
 SLA_PHASES = ("contacto", "ejecucion", "cerrado")
 SLA_CONTACT_RESULTS = ("pendiente", "cumplido", "vencido")
 
+# Tope máximo por campo de tiempo del SLA (spec 028, OBS-0031) — 15 días, confirmado con el
+# usuario. Único lugar donde vive el número mágico; reusado por la validación del backend
+# (backend/api/routes/sla_rules.py) y replicado en la regla de `SlaRuleForm.tsx` (frontend).
+SLA_FIELD_MAX_MINUTES = 15 * 24 * 60
+
 
 @dataclass
 class SlaRule:

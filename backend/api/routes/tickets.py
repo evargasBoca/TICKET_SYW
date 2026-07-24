@@ -25,6 +25,7 @@ from backend.domain.services.comment_service import CommentService
 from backend.domain.services.notification_service import NotificationService
 from backend.domain.services.rich_content_service import resolve_pending_images, sanitize_html, strip_html
 from backend.domain.services.ticket_service import TicketService, TicketValidationError
+from backend.domain.services.ticket_timer_service import TicketTimerService
 from backend.infra.database import get_db
 from backend.infra.repositories.calendar_repo import (
     AbsenceRequestRepository, HolidayRepository, resolve_effective_schedule_slots,
@@ -40,6 +41,7 @@ from backend.infra.repositories.resource_repo import ResourceRepository
 from backend.infra.repositories.sla_rule_repo import SlaRuleRepository
 from backend.infra.repositories.task_list_repo import TaskListRepository
 from backend.infra.repositories.ticket_repo import TicketRepository
+from backend.infra.repositories.ticket_timer_repo import TicketTimerRepository
 from backend.infra.repositories.user_repo import UserRepository
 from backend.infra.repositories.work_session_repo import WorkSessionRepository
 from backend.infra.storage import attachments as attachment_storage
@@ -53,6 +55,7 @@ _assign_svc = AssignmentService()
 _reassign_svc = ReassignmentService()
 _comment_svc = CommentService()
 _notif_svc = NotificationService()
+_timer_svc = TicketTimerService()
 
 CLOSE_ELIGIBLE_DAYS = 3
 
@@ -302,6 +305,12 @@ _ticket_detail_out = ns.inherit("TicketDetail", _ticket_out, {
     "resolved_at": fields.String(allow_null=True),
     "resolution_accepted_at": fields.String(allow_null=True),
     "closed_at": fields.String(allow_null=True),
+    "sla_effective_start": fields.String(
+        allow_null=True, description="Inicio efectivo del SLA persistido (spec 028, FR-005); "
+                                     "null si el SLA está pausado o no configurado"),
+    "work_period_start": fields.String(
+        allow_null=True, description="Inicio de la jornada laboral aplicable, derivado a partir "
+                                     "de la creación del ticket (spec 028, FR-005, OBS-0040)"),
     "locked_fields": fields.List(fields.String(), description="Campos no editables en el estado actual (FR-010)"),
     "close_eligible": fields.Boolean(description="true si acepta cierre (aceptado o 3+ días resuelto)"),
     "valid_actions": fields.List(fields.String(), description="Ticket: triggers FSM ejecutables "
@@ -403,6 +412,21 @@ def _resolve_sla_context(db, ticket: Ticket) -> dict:
     now = datetime.now(timezone.utc)
     from_date = (ticket.sla_last_resume_at or now).date()
     absences = AbsenceRequestRepository(db).list_approved_between(resource.id, from_date, now.date())
+    return {"resource": resource, "holidays": holidays, "schedule_slots": schedule_slots, "absences": absences}
+
+
+def _resolve_calendar_context_for_resource(db, resource) -> dict:
+    """Mismo criterio que `_resolve_sla_context`, pero a partir de un `resource` ya resuelto en
+    vez del `assignee_id` de un ticket (spec 028, US6/OBS-0036) — usado para clasificar
+    `off_hours` del registro de tiempo que genera el auto-stop del cronómetro al cerrar un
+    ticket."""
+    if resource is None:
+        return {}
+    now = datetime.now(timezone.utc)
+    holidays = HolidayRepository(db).list_by_country(resource.calendar_country) if resource.calendar_country else []
+    schedule_slots = resolve_effective_schedule_slots(db, resource)
+    absences = AbsenceRequestRepository(db).list_approved_between(
+        resource.id, now.date() - timedelta(days=1), now.date() + timedelta(days=1))
     return {"resource": resource, "holidays": holidays, "schedule_slots": schedule_slots, "absences": absences}
 
 
@@ -511,7 +535,25 @@ def _ticket_detail(ticket: Ticket, db) -> dict:
         "skills": [{"id": str(s.id), "code": s.code, "label": s.label} for s in (ticket.skills or [])],
         "sla": sla_service.compute_state(ticket, datetime.now(timezone.utc), **_resolve_sla_context(db, ticket)),
     })
+    d.update(_sla_timestamps(db, ticket))
     return d
+
+
+def _sla_timestamps(db, ticket: Ticket) -> dict:
+    """FR-005 (spec 028, OBS-0040): timestamps distinguibles del ciclo de SLA, solo para el
+    detalle de un ticket (no en listados, para no repetir el recorrido de calendario por fila).
+    `assigned_at` ya viaja en `assignments` (lista completa); aquí solo se agregan los dos campos
+    que no existían en el payload: el inicio efectivo del SLA persistido, y el inicio de la
+    jornada laboral aplicable (derivado, no persistido) desde la creación del ticket."""
+    sla_ctx = _resolve_sla_context(db, ticket)
+    work_period_start = sla_service.next_work_period_start(
+        sla_ctx.get("resource"), ticket.created_at, sla_ctx.get("holidays"),
+        sla_ctx.get("schedule_slots"), sla_ctx.get("absences"),
+    ) if ticket.created_at else None
+    return {
+        "sla_effective_start": ticket.sla_last_resume_at.isoformat() if ticket.sla_last_resume_at else None,
+        "work_period_start": work_period_start.isoformat() if work_period_start else None,
+    }
 
 
 def _transitions_with_sla(db, ticket: Ticket) -> list[dict]:
@@ -562,11 +604,31 @@ def _sla_updates_for_transition(db, ticket: Ticket, new_status: str) -> dict:
         if _is_task(ticket, db):
             return {}
         updates = sla_service.apply_transition(
-            ticket, new_status, datetime.now(timezone.utc), SlaRuleRepository(db))
+            ticket, new_status, datetime.now(timezone.utc), SlaRuleRepository(db),
+            **_resolve_sla_context(db, ticket))
         return updates or {}
     except Exception:
         logger.exception("SLA sync failed for ticket %s (-> %s)", ticket.id, new_status)
         return {}
+
+
+def _stop_timer_on_close(db, ticket: Ticket, actor_id: uuid.UUID) -> None:
+    """OBS-0035 (spec 028, FR-007): detiene automáticamente el cronómetro activo del recurso
+    asignado, si estaba corriendo sobre este ticket, al cerrarlo — DEBE llamarse con `ticket`
+    todavía en su estado previo (antes de persistir `status="cerrado"`), para que la validación
+    interna de `finish()` no lo rechace como ya cerrado. Igual que `_sla_updates_for_transition`:
+    nunca debe romper el cierre ya validado por el llamador."""
+    try:
+        is_task = _is_task(ticket, db)
+        resource = ResourceRepository(db).get_by_id(ticket.assignee_id) if ticket.assignee_id else None
+        _timer_svc.stop_if_active_for_ticket(
+            ticket=ticket, timer_repo=TicketTimerRepository(db), tickets_repo=TicketRepository(db),
+            work_sessions_repo=WorkSessionRepository(db), created_by=actor_id,
+            resources_repo=ResourceRepository(db), is_task=is_task,
+            calendar_context=_resolve_calendar_context_for_resource(db, resource),
+        )
+    except Exception:
+        logger.exception("Auto-stop de cronómetro falló al cerrar el ticket %s", ticket.id)
 
 
 def _apply_transition(db, ticket: Ticket, trigger: str, actor_id: uuid.UUID,
@@ -659,8 +721,9 @@ class TicketList(Resource):
     @ns.doc("create_ticket")
     @ns.expect(_ticket_input, validate=False)
     @ns.response(201, "Ticket creado (nace en estado NUEVO)", _ticket_detail_out)
-    @ns.response(400, "Datos inválidos, enum desconocido, o adjunto/imagen no permitida "
-                      "(attachment_error, spec 017)", _error)
+    @ns.response(400, "Datos inválidos, enum desconocido, adjunto/imagen no permitida "
+                      "(attachment_error, spec 017), título vacío (`title_blank`, spec 028) o "
+                      "con emojis (`title_invalid_chars`, spec 028)", _error)
     @ns.response(401, "No autenticado", _error)
     @ns.response(403, "Sin permiso tickets:create", _error)
     @ns.response(404, "Cliente, proyecto, catálogo o client_contact_id no encontrado", _error)
@@ -735,6 +798,7 @@ class TicketList(Resource):
             list_id = parse_uuid(data["list_id"]) if data.get("list_id") else None
             parent_task_id = parse_uuid(data["parent_task_id"]) if data.get("parent_task_id") else None
         try:
+            validated_title = _svc.validate_title(data["title"])
             resolved_record_type_id = _svc.resolve_record_type(
                 record_type_id, CatalogRepository(db, "record-types"))
             is_task = (not is_encargado) and _svc.is_task_record_type(
@@ -830,7 +894,7 @@ class TicketList(Resource):
 
             ticket = Ticket(
                 id=ticket_id, ticket_number=0,  # lo asigna la secuencia
-                title=str(data["title"]).strip(), description=description,
+                title=validated_title, description=description,
                 ticket_type=ticket_type, priority=priority,
                 severity=severity, client_id=client_id,
                 status="nuevo",
@@ -895,7 +959,9 @@ class TicketDetail(Resource):
 
     @ns.doc("update_ticket")
     @ns.response(200, "Ticket actualizado", _ticket_detail_out)
-    @ns.response(400, "Datos inválidos, campo desconocido o intento de editar `status`", _error)
+    @ns.response(400, "Datos inválidos, campo desconocido, intento de editar `status`, título "
+                      "vacío (`title_blank`, spec 028) o con emojis (`title_invalid_chars`, "
+                      "spec 028)", _error)
     @ns.response(401, "No autenticado", _error)
     @ns.response(403, "Sin permiso tickets:edit", _error)
     @ns.response(404, "Ticket, o client_contact_id, no encontrado", _error)
@@ -1026,6 +1092,10 @@ class TicketAssign(Resource):
             )
             CommentRepository(db).add(comment, commit=False)
             new_status = ticket_fsm.apply(ticket.status, trigger)
+            # OBS-0039: `_resolve_sla_context` necesita el `assignee_id` ya resuelto para poder
+            # aplicar el calendario del recurso — en una primera asignación, `ticket` todavía
+            # trae el `assignee_id` viejo (None) hasta el `update_fields` de abajo.
+            ticket.assignee_id = assignee_id
             sla_updates = _sla_updates_for_transition(db, ticket, new_status)
             ticket_repo.update_fields(ticket.id, status=new_status, assignee_id=assignee_id,
                                       **sla_updates)
@@ -1349,6 +1419,10 @@ class TicketClose(Resource):
             if not _close_eligible(ticket):
                 return {"error": "close_not_allowed",
                         "message": "El cierre requiere aceptación del usuario o 3+ días sin respuesta"}, 409
+            # OBS-0035: detener el cronómetro (si estaba activo) ANTES de validar tiempo
+            # registrado — persiste el tiempo ya acumulado como WorkSession, para que cuente en
+            # el chequeo `no_time_registered` de abajo en vez de perderse.
+            _stop_timer_on_close(db, ticket, actor_id)
             resolution_type = CatalogRepository(db, "resolution-types").get_by_id(resolution_type_id)
             if not resolution_type:
                 return {"error": "not_found", "message": "Tipo de resolución no encontrado"}, 404
@@ -1466,6 +1540,10 @@ class TicketStatusChange(Resource):
             if not strip_html(comment).strip():
                 return {"error": "validation_error",
                         "message": "Debe indicar un comentario que documente el cambio de estado"}, 400
+            if new_status == "cerrado":
+                # OBS-0035: igual que en TicketClose — detener el cronómetro antes de validar
+                # tiempo registrado, para que el tiempo recién acumulado cuente.
+                _stop_timer_on_close(db, ticket, g.current_user.id)
             if new_status == "cerrado" and WorkSessionRepository(db).sum_minutes_for_ticket(ticket.id) <= 0:
                 return {"error": "no_time_registered",
                         "message": "No se puede cerrar: la Tarea no tiene tiempo registrado."}, 409

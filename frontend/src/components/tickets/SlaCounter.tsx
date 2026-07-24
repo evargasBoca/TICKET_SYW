@@ -4,6 +4,11 @@ import type { TicketSlaState } from '../../types/sla'
 
 interface SlaCounterProps {
   sla: TicketSlaState
+  /** OBS-0032 (spec 028): si el ticket todavía no tiene resolutor asignado, el conteo de la
+   * fase Contacto ya está corriendo a nivel de dominio (wall-clock, FR-004/FR-005 spec 014),
+   * pero mostrarlo como "Corriendo" da la falsa impresión de que alguien ya está trabajando en
+   * él. Sin este dato, se asume que sí hay asignado (comportamiento actual, sin cambios). */
+  hasAssignee?: boolean
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -19,6 +24,9 @@ const STATUS_LABELS: Record<TicketSlaState['status'], string> = {
   vencido: 'Vencido',
   detenido: 'Detenido',
 }
+
+/** Ver `hasAssignee` — mismo criterio visual, distinto de `STATUS_LABELS.corriendo`. */
+const PENDING_ASSIGNMENT_LABEL = 'Pendiente de asignación'
 
 const CONTACT_RESULT_LABELS: Record<string, string> = {
   pendiente: 'Pendiente', cumplido: 'Cumplido', vencido: 'Vencido',
@@ -44,7 +52,9 @@ function statusColor(status: TicketSlaState['status']): string {
 /** Reemplaza el placeholder `—:—:—` / "Próximamente · Fase 4" del detalle del ticket
  * (Historia 2, spec 014). Muestra la fase vigente, el tiempo consumido/límite, el estado del
  * contador, y — una vez superada — el resultado congelado de la fase Contacto (FR-007). */
-export default function SlaCounter({ sla }: SlaCounterProps) {
+export default function SlaCounter({ sla, hasAssignee = true }: SlaCounterProps) {
+  const isPendingAssignment = !hasAssignee && sla.phase === 'contacto' && sla.status === 'corriendo'
+
   if (sla.status === 'sin_sla' || sla.phase_limit_minutes == null) {
     return (
       <>
@@ -64,7 +74,7 @@ export default function SlaCounter({ sla }: SlaCounterProps) {
 
   const consumedMinutes = sla.consumed_seconds / 60
   const pct = Math.min(100, Math.round((consumedMinutes / sla.phase_limit_minutes) * 100))
-  const color = statusColor(sla.status)
+  const color = isPendingAssignment ? palette.slate400 : statusColor(sla.status)
 
   return (
     <>
@@ -75,8 +85,12 @@ export default function SlaCounter({ sla }: SlaCounterProps) {
             {' / '}{formatDuration(sla.phase_limit_minutes * 60)}
           </span>
         </span>
-        <Tooltip title={PHASE_LABELS[sla.phase ?? ''] ?? sla.phase}>
-          <Tag color={sla.status === 'vencido' ? 'red' : undefined}>{STATUS_LABELS[sla.status]}</Tag>
+        <Tooltip title={isPendingAssignment
+          ? 'El conteo de Contacto inicia con la creación del ticket, pero todavía no tiene un resolutor asignado trabajando en él'
+          : (PHASE_LABELS[sla.phase ?? ''] ?? sla.phase)}>
+          <Tag color={sla.status === 'vencido' ? 'red' : undefined}>
+            {isPendingAssignment ? PENDING_ASSIGNMENT_LABEL : STATUS_LABELS[sla.status]}
+          </Tag>
         </Tooltip>
       </div>
       <div style={{ height: 6, background: palette.slate200, borderRadius: 3, marginBottom: 6 }}>

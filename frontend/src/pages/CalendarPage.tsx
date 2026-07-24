@@ -10,7 +10,7 @@ import { resourceService } from '../services/resourceService'
 import { avatarColor, palette, CALENDAR_CATEGORY_COLORS } from '../theme'
 import type { ClientListItem } from '../types/client'
 import type { Resource } from '../types/resource'
-import type { Holiday, Workload } from '../types/calendar'
+import type { AbsenceRequest, Holiday, WorkSchedule, Workload } from '../types/calendar'
 import AbsenceRequestFormModal from '../components/calendar/AbsenceRequestFormModal'
 import DayAgenda from '../components/calendar/DayAgenda'
 
@@ -76,12 +76,44 @@ function HolidayCalendar({ country, title, birthDate }: { country: string | null
   )
 }
 
-function CalendarLegend({ resources }: { resources?: Resource[] }) {
+const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+
+/** "Lun-Vie 08:00-17:00, Sáb 09:00-13:00" (spec 028, OBS-0037, FR-018) — agrupa días
+ * consecutivos con el mismo horario en vez de listar cada uno por separado. */
+function formatWorkSchedule(items: { weekday: number; start_time: string; end_time: string }[]): string {
+  if (items.length === 0) return 'Sin jornada laboral configurada'
+  const sorted = [...items].sort((a, b) => a.weekday - b.weekday)
+  const groups: { from: number; to: number; start: string; end: string }[] = []
+  for (const slot of sorted) {
+    const last = groups[groups.length - 1]
+    if (last && last.to === slot.weekday - 1 && last.start === slot.start_time && last.end === slot.end_time) {
+      last.to = slot.weekday
+    } else {
+      groups.push({ from: slot.weekday, to: slot.weekday, start: slot.start_time, end: slot.end_time })
+    }
+  }
+  return groups.map(g => {
+    const days = g.from === g.to ? WEEKDAY_LABELS[g.from] : `${WEEKDAY_LABELS[g.from]}-${WEEKDAY_LABELS[g.to]}`
+    return `${days} ${g.start}-${g.end}`
+  }).join(', ')
+}
+
+/** Día siguiente en formato `YYYY-MM-DD` — FullCalendar trata `end` como exclusivo en eventos
+ * `allDay`, así que una ausencia de un solo día (`start_date === end_date`) necesita `end` un
+ * día después de `end_date` para pintarse (spec 028, OBS-0037). */
+function _dayAfter(isoDate: string): string {
+  const d = new Date(`${isoDate}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function CalendarLegend({ resources, showAusencia }: { resources?: Resource[]; showAusencia?: boolean }) {
   const items: [string, string][] = [
     [CALENDAR_CATEGORY_COLORS.oficial, 'Festivo oficial'],
     [CALENDAR_CATEGORY_COLORS.regional_religioso, 'Regional / religioso'],
   ]
   if (resources) items.push([CALENDAR_CATEGORY_COLORS.cumpleanos, 'Cumpleaños'])
+  if (showAusencia) items.push([CALENDAR_CATEGORY_COLORS.ausencia, 'Ausencia / permiso aprobado'])
   return (
     <Space size={16} wrap>
       {items.map(([color, label]) => (
@@ -107,6 +139,9 @@ function TeamOverlayCalendar({ resources, view, onViewChange }: {
   resources: Resource[]; view: string; onViewChange: (view: string) => void
 }) {
   const [holidaysByResource, setHolidaysByResource] = useState<Record<string, Holiday[]>>({})
+  const [scheduleByResource, setScheduleByResource] = useState<Record<string, WorkSchedule>>({})
+  const [absencesByResource, setAbsencesByResource] = useState<Record<string, AbsenceRequest[]>>({})
+  const [absencesForbidden, setAbsencesForbidden] = useState(false)
 
   useEffect(() => {
     resources.forEach(r => {
@@ -118,33 +153,80 @@ function TeamOverlayCalendar({ resources, view, onViewChange }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resources])
 
+  // OBS-0037 (spec 028, FR-018): jornada laboral y ausencias del recurso, además de festivos y
+  // cumpleaños — antes el calendario de Equipo solo mostraba estos dos últimos.
+  useEffect(() => {
+    resources.forEach(r => {
+      if (scheduleByResource[r.id]) return
+      calendarService.getWorkSchedule(r.id)
+        .then(schedule => setScheduleByResource(prev => ({ ...prev, [r.id]: schedule })))
+        .catch(() => undefined)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resources])
+
+  useEffect(() => {
+    resources.forEach(r => {
+      if (absencesByResource[r.id]) return
+      // 403 esperado para la mayoría de los roles (requiere absence_requests:view_all, rol
+      // RRHH) — listAbsenceRequestsForResource ya usa skipErrorNotify; degrada a "sin datos".
+      calendarService.listAbsenceRequestsForResource(r.id)
+        .then(items => setAbsencesByResource(prev => ({ ...prev, [r.id]: items })))
+        .catch((err: { response?: { status?: number } }) => {
+          if (err.response?.status === 403) setAbsencesForbidden(true)
+          setAbsencesByResource(prev => ({ ...prev, [r.id]: [] }))
+        })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resources])
+
   const events = useMemo(() => {
     const multi = resources.length > 1
     return resources.flatMap(r => {
       const color = multi ? avatarColor(r.id).text : undefined
       const prefix = multi ? `${r.full_name} — ` : ''
       const holidays = holidaysByResource[r.id] ?? []
+      const absences = (absencesByResource[r.id] ?? []).filter(a => a.overall_status === 'approved')
       return [
         ...holidays.map(h => ({
           title: `${prefix}${h.name}`, start: h.holiday_date, allDay: true,
           color: color ?? (h.category === 'oficial' ? CALENDAR_CATEGORY_COLORS.oficial : CALENDAR_CATEGORY_COLORS.regional_religioso),
         })),
         ..._birthdayEvents(`${prefix}${r.full_name}`, r.birth_date).map(e => ({ ...e, color: color ?? e.color })),
+        ...absences.map(a => ({
+          title: `${prefix}${a.absence_type.name}`, start: a.start_date, end: _dayAfter(a.end_date), allDay: true,
+          color: color ?? CALENDAR_CATEGORY_COLORS.ausencia,
+        })),
       ]
     })
-  }, [resources, holidaysByResource])
+  }, [resources, holidaysByResource, absencesByResource])
 
   return (
-    <FullCalendar
-      key={resources.map(r => r.id).join(',') || 'empty'}
-      plugins={[dayGridPlugin, timeGridPlugin]}
-      initialView={view}
-      height="auto"
-      headerToolbar={{ left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' }}
-      events={events}
-      locale="es"
-      datesSet={arg => onViewChange(arg.view.type)}
-    />
+    <>
+      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        {resources.map(r => (
+          <Typography.Text key={r.id} type="secondary" style={{ fontSize: 12 }}>
+            <strong>{r.full_name}:</strong>{' '}
+            {scheduleByResource[r.id] ? formatWorkSchedule(scheduleByResource[r.id].items) : 'Cargando jornada laboral…'}
+          </Typography.Text>
+        ))}
+      </Space>
+      <FullCalendar
+        key={resources.map(r => r.id).join(',') || 'empty'}
+        plugins={[dayGridPlugin, timeGridPlugin]}
+        initialView={view}
+        height="auto"
+        headerToolbar={{ left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' }}
+        events={events}
+        locale="es"
+        datesSet={arg => onViewChange(arg.view.type)}
+      />
+      {absencesForbidden && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Las ausencias/permisos aprobados solo son visibles para roles con permiso de RRHH.
+        </Typography.Text>
+      )}
+    </>
   )
 }
 
@@ -250,7 +332,7 @@ export default function CalendarPage() {
           {selectedResources.length === 0
             ? <Typography.Text type="secondary">Selecciona uno o más miembros del equipo.</Typography.Text>
             : <>
-                <CalendarLegend resources={selectedResources} />
+                <CalendarLegend resources={selectedResources} showAusencia />
                 <TeamOverlayCalendar resources={selectedResources} view={view} onViewChange={setView} />
                 <WorkloadPanel resources={selectedResources} />
                 {view === 'timeGridDay' && selectedResources.length === 1 && (

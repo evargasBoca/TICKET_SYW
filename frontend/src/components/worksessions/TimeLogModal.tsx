@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Modal, Popconfirm, Space, Table, Tooltip, message } from 'antd'
+import { Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import { workSessionService } from '../../services/workSessionService'
@@ -83,7 +83,19 @@ export default function TimeLogModal({ open, onClose, ticketId, ticketNumber, ti
   }
 
   const columns: ColumnsType<WorkSessionListItem> = [
-    { title: 'Fecha', dataIndex: 'work_date', key: 'work_date' },
+    {
+      title: 'Fecha', dataIndex: 'work_date', key: 'work_date',
+      render: (workDate: string, record) => (
+        <Space size={4}>
+          {workDate}
+          {record.off_hours && (
+            <Tooltip title="El registro cae total o parcialmente fuera del horario laboral configurado">
+              <Tag color="warning" style={{ marginInlineEnd: 0 }}>Fuera de jornada</Tag>
+            </Tooltip>
+          )}
+        </Space>
+      ),
+    },
     {
       title: 'Horario', key: 'time_range',
       render: (_, record) => formatTimeRange(record) ?? '—',

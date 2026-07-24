@@ -1,5 +1,10 @@
 import type { Priority } from './ticket'
 
+/** Tope máximo por campo de tiempo del SLA (spec 028, OBS-0031) — mismo valor que
+ * `SLA_FIELD_MAX_MINUTES` en `backend/domain/entities/sla_rule.py` (15 días); mantener en
+ * sincronía si cambia. */
+export const SLA_FIELD_MAX_MINUTES = 15 * 24 * 60
+
 export interface SlaRule {
   id: string
   project_id: string

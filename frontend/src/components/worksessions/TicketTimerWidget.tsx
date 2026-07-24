@@ -7,6 +7,9 @@ import { palette } from '../../theme'
 
 interface TicketTimerWidgetProps {
   ticketId: string
+  /** Estado actual del ticket (spec 028, OBS-0035) — con `'cerrado'` se deshabilita "Iniciar"
+   * proactivamente en vez de depender solo del error `ticket_closed` del backend al intentarlo. */
+  ticketStatus?: string
   /** Se dispara tras un "Terminar" exitoso, para que `TicketDetailPage` refresque el resumen
    * de `TicketWorkSessions` (componente hermano con su propio fetch — spec 012). */
   onFinished?: () => void
@@ -28,7 +31,7 @@ function errorMessage(err: unknown, fallback: string): string {
  * personal por recurso — solo ve y controla el suyo (FR-005). El tiempo mostrado se deriva de
  * `total_seconds` recibido del servidor en el último fetch más lo transcurrido localmente
  * (research.md Decisión 2), nunca de un contador propio del navegador. */
-export default function TicketTimerWidget({ ticketId, onFinished }: TicketTimerWidgetProps) {
+export default function TicketTimerWidget({ ticketId, ticketStatus, onFinished }: TicketTimerWidgetProps) {
   const [timer, setTimer] = useState<Timer | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -65,6 +68,7 @@ export default function TicketTimerWidget({ ticketId, onFinished }: TicketTimerW
 
   const isActiveHere = timer && timer.status !== 'inactive' && timer.ticket_id === ticketId
   const isActiveElsewhere = timer && timer.status !== 'inactive' && timer.ticket_id !== ticketId
+  const isClosed = ticketStatus === 'cerrado'
 
   const run = async (action: () => Promise<Timer>, successMsg?: string) => {
     setBusy(true)
@@ -101,6 +105,12 @@ export default function TicketTimerWidget({ ticketId, onFinished }: TicketTimerW
 
   return (
     <div>
+      {isClosed && !isActiveHere && (
+        <Alert
+          type="info" showIcon style={{ marginBottom: 8 }}
+          message="Este ticket ya está cerrado — no admite nuevos registros de tiempo."
+        />
+      )}
       {isActiveElsewhere && (
         <Alert
           type="info" showIcon style={{ marginBottom: 8 }}
@@ -123,10 +133,12 @@ export default function TicketTimerWidget({ ticketId, onFinished }: TicketTimerW
           </Tag>
         )}
         {!isActiveHere && !isActiveElsewhere && (
-          <Button icon={<PlayCircleOutlined />} loading={busy}
-            onClick={() => run(() => timerService.start(ticketId), 'Cronómetro iniciado')}>
-            Iniciar
-          </Button>
+          <Tooltip title={isClosed ? 'Ticket cerrado: no admite nuevos registros de tiempo' : undefined}>
+            <Button icon={<PlayCircleOutlined />} loading={busy} disabled={isClosed}
+              onClick={() => run(() => timerService.start(ticketId), 'Cronómetro iniciado')}>
+              Iniciar
+            </Button>
+          </Tooltip>
         )}
         {isActiveHere && timer?.status === 'running' && (
           <Button icon={<PauseCircleOutlined />} loading={busy}

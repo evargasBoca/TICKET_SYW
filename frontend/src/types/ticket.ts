@@ -208,6 +208,11 @@ export interface TicketDetail extends TicketListItem {
   skills: TicketSkillRef[]
   /** Estado de SLA (Fase 4, spec 014) — 'sin_sla' para Tareas/Subtareas (FR-012). */
   sla: TicketSlaState
+  /** Inicio efectivo del SLA persistido (spec 028, FR-005) — `null` si está pausado o sin SLA. */
+  sla_effective_start: string | null
+  /** Inicio de la jornada laboral aplicable, derivado desde la creación del ticket (spec 028,
+   * FR-005, OBS-0040) — permite distinguir "cuándo se creó" de "cuándo empezó a correr el SLA". */
+  work_period_start: string | null
 }
 
 export interface TicketFormData {

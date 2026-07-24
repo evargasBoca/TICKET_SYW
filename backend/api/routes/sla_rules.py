@@ -9,7 +9,7 @@ from flask_restx import Namespace, Resource, fields
 
 from backend.api.middleware.rbac import require_permission
 from backend.api.routes._shared import parse_uuid, error_model, server_error
-from backend.domain.entities.sla_rule import PRIORITIES, SlaRule
+from backend.domain.entities.sla_rule import PRIORITIES, SLA_FIELD_MAX_MINUTES, SlaRule
 from backend.domain.errors import DomainError
 from backend.infra.database import get_db
 from backend.infra.repositories.project_repo import ProjectRepository
@@ -66,13 +66,22 @@ def _serialize(rule: SlaRule, db) -> dict:
 
 
 def _validate_minutes(data: dict) -> None:
+    """OBS-0030/OBS-0031 (spec 028): rechaza explícitamente valores fuera de rango en vez de
+    dejar que el llamador los autocorrija en silencio (ver `SlaRuleForm.tsx`, que antes confiaba
+    en el clamp visual de `InputNumber min={1}`)."""
     for f in ("contact_minutes", "execution_minutes"):
         if f in data and data[f] is not None:
             try:
-                if int(data[f]) <= 0:
-                    raise DomainError("validation_error", f"'{f}' debe ser un entero > 0", status_code=400)
+                value = int(data[f])
             except (TypeError, ValueError):
                 raise DomainError("validation_error", f"'{f}' debe ser un entero > 0", status_code=400)
+            if value <= 0:
+                raise DomainError("validation_error", f"'{f}' debe ser un entero > 0", status_code=400)
+            if value > SLA_FIELD_MAX_MINUTES:
+                raise DomainError(
+                    "max_exceeded",
+                    f"'{f}' no puede superar {SLA_FIELD_MAX_MINUTES} minutos ({SLA_FIELD_MAX_MINUTES // 1440} días)",
+                    status_code=400)
 
 
 @ns.route("")
@@ -105,7 +114,8 @@ class SlaRuleList(Resource):
     @ns.doc("create_sla_rule")
     @ns.expect(_sla_rule_input, validate=False)
     @ns.response(201, "Regla creada", _sla_rule_out)
-    @ns.response(400, "Datos inválidos", _error)
+    @ns.response(400, "Datos inválidos, o `contact_minutes`/`execution_minutes` fuera de rango "
+                      "(<= 0, o > 21600 = 15 días — `max_exceeded`, spec 028/OBS-0031)", _error)
     @ns.response(401, "No autenticado", _error)
     @ns.response(403, "Sin permiso sla_rules:manage", _error)
     @ns.response(404, "project_id no existe", _error)
@@ -152,7 +162,8 @@ class SlaRuleDetail(Resource):
     @ns.doc("update_sla_rule")
     @ns.expect(_sla_rule_patch_input, validate=False)
     @ns.response(200, "Regla actualizada", _sla_rule_out)
-    @ns.response(400, "UUID o datos inválidos", _error)
+    @ns.response(400, "UUID o datos inválidos, o `contact_minutes`/`execution_minutes` fuera de "
+                      "rango (<= 0, o > 21600 = 15 días — `max_exceeded`, spec 028/OBS-0031)", _error)
     @ns.response(401, "No autenticado", _error)
     @ns.response(403, "Sin permiso sla_rules:manage", _error)
     @ns.response(404, "Regla no encontrada", _error)

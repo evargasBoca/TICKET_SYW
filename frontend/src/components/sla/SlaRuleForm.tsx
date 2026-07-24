@@ -4,6 +4,7 @@ import { InfoCircleOutlined } from '@ant-design/icons'
 import type { FormInstance } from 'antd'
 import type { ProjectListItem } from '../../types/project'
 import type { SlaRuleFormData } from '../../types/sla'
+import { SLA_FIELD_MAX_MINUTES } from '../../types/sla'
 import { PRIORITY_LABELS } from '../../types/ticket'
 
 interface SlaRuleFormProps {
@@ -68,7 +69,6 @@ function ExecutionTimeInput({ value, onChange }: ExecutionTimeInputProps) {
     <Space.Compact style={{ width: '100%' }}>
       <InputNumber
         style={{ width: '60%' }}
-        min={0}
         placeholder="8"
         value={amount ?? undefined}
         onChange={v => emit(v, unit)}
@@ -114,9 +114,16 @@ export default function SlaRuleForm({ form, projects, editing, onFinish }: SlaRu
       <Form.Item
         name="contact_minutes"
         label="Tiempo límite de contacto (minutos)"
-        rules={[{ required: true, message: 'Requerido' }, { type: 'number', min: 1, message: 'Debe ser mayor a 0' }]}
+        rules={[
+          { required: true, message: 'Requerido' },
+          { type: 'number', min: 1, message: 'El tiempo mínimo permitido es de 1 minuto' },
+          { type: 'number', max: SLA_FIELD_MAX_MINUTES,
+            message: `No puede superar ${SLA_FIELD_MAX_MINUTES} minutos (15 días)` },
+        ]}
       >
-        <InputNumber style={{ width: '100%' }} min={1} placeholder="15" />
+        {/* Sin `min`/`max` en el InputNumber (OBS-0030): esos props autocorrigen el valor en
+           silencio en vez de dejar que el Form.Item lo rechace con un mensaje explícito. */}
+        <InputNumber style={{ width: '100%' }} placeholder="15" />
       </Form.Item>
       <Form.Item
         name="execution_minutes"
@@ -130,7 +137,12 @@ export default function SlaRuleForm({ form, projects, editing, onFinish }: SlaRu
             <InfoCircleOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />
           </Tooltip>
         </span>}
-        rules={[{ required: true, message: 'Requerido' }, { type: 'number', min: 1, message: 'Debe ser mayor a 0' }]}
+        rules={[
+          { required: true, message: 'Requerido' },
+          { type: 'number', min: 1, message: 'El tiempo mínimo permitido es de 1 minuto' },
+          { type: 'number', max: SLA_FIELD_MAX_MINUTES,
+            message: `No puede superar ${SLA_FIELD_MAX_MINUTES} minutos (15 días)` },
+        ]}
       >
         <ExecutionTimeInput />
       </Form.Item>
