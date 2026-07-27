@@ -30,7 +30,13 @@ class CatalogRepository:
         return model.to_dict() if model else None
 
     def create(self, name: str) -> dict:
-        model = self._model(id=uuid.uuid4(), name=name)
+        kwargs = {"id": uuid.uuid4(), "name": name}
+        if hasattr(self._model, "color_index"):
+            # research.md Decisión 2: siguiente color libre de una paleta fija de 8 (frontend),
+            # nunca elegido por el usuario; estable una vez asignado.
+            existing_count = self._db.query(self._model).count()
+            kwargs["color_index"] = existing_count % 8
+        model = self._model(**kwargs)
         self._db.add(model)
         self._db.commit()
         self._db.refresh(model)

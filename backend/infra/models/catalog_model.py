@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Boolean, Column, Text, TIMESTAMP
+from sqlalchemy import Boolean, Column, SmallInteger, Text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func, text
 from backend.infra.models import Base
@@ -45,6 +45,17 @@ class AbsenceTypeCatalogModel(_CatalogMixin, Base):
     __tablename__ = "catalog_absence_types"
 
 
+class AccessTypeCatalogModel(_CatalogMixin, Base):
+    """Tipos de acceso/conexión del Cliente (spec 031, UAT OBS-0041) — reemplaza el enum fijo
+    de código de client_access.access_type. color_index se asigna automáticamente en
+    CatalogRepository.create(), nunca lo elige el usuario (research.md Decisión 2)."""
+    __tablename__ = "catalog_access_types"
+    color_index = Column(SmallInteger, nullable=False, default=0)
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(), "color_index": self.color_index}
+
+
 CATALOG_MODELS = {
     "tools": ToolCatalogModel,
     "processes": ProcessCatalogModel,
@@ -52,6 +63,7 @@ CATALOG_MODELS = {
     "record-types": RecordTypeCatalogModel,
     "teams": TeamCatalogModel,
     "absence-types": AbsenceTypeCatalogModel,
+    "access-types": AccessTypeCatalogModel,
 }
 
 # columna de tickets que referencia cada catálogo (para el bloqueo por uso). "teams" no aplica —

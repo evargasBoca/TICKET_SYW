@@ -44,6 +44,6 @@
 | OBS-0038 | Tickets > Detalle del Ticket > SLA | Defecto | Lista para Validar | Arely Pazmiño | ITER-005 | — | SLA contabiliza tiempo fuera del horario laboral al cambiar el estado del ticket |
 | OBS-0039 | Tickets > Detalle del Ticket > SLA | Defecto | Lista para Validar | Arely Pazmiño | ITER-005 | — | SLA contabiliza tiempo incorrectamente cuando el ticket es creado fuera del horario laboral |
 | OBS-0040 | Tickets > Panel de Asignación / Detalle del Ticket | Mejora | Lista para Validar | Arely Pazmiño | ITER-005 | — | Se permite asignar un ticket fuera del horario laboral |
-| OBS-0041 | Clientes > Accesos y conexiones | Mejora | Abierta | Camilo Reyes | ITER-006 | — | Catálogo de tipos de acceso administrable, credenciales múltiples por acceso y adjunto por acceso (amplía OBS-0001) |
+| OBS-0041 | Clientes > Accesos y conexiones | Mejora | Lista para Validar | Camilo Reyes | ITER-006 | — | Catálogo de tipos de acceso administrable, credenciales múltiples por acceso y adjunto por acceso (amplía OBS-0001) |
 | OBS-0042 | Tickets > Detalle del Ticket | Mejora | Lista para Validar | Juan Murcia | ITER-007 | — | Scroll excesivo por historial de comentarios extenso; reorganizar layout (Comentarios y acciones fijos a la derecha, historial con scroll interno) |
 | OBS-0043 | SLA Configurable | Mejora | Lista para Validar | Juan Murcia | ITER-007 | — | No se identifica el cliente en proyectos homónimos (filtro, creación y tabla de reglas de SLA) |

@@ -1,9 +1,11 @@
 from typing import Optional
 from sqlalchemy.orm import Session
 from backend.infra.models.client_model import (
-    ClientModel, ClientSystemModel, ClientAccessModel, ClientAccessAttachmentModel,
+    ClientModel, ClientSystemModel, ClientAccessModel, ClientAccessCredentialModel, ClientAccessAttachmentModel,
 )
-from backend.domain.entities.client import Client, ClientSystem, ClientAccess, ClientAccessAttachment
+from backend.domain.entities.client import (
+    Client, ClientSystem, ClientAccess, ClientAccessCredential, ClientAccessAttachment,
+)
 import uuid
 
 
@@ -108,11 +110,8 @@ class ClientRepository:
         model = self._db.get(ClientAccessModel, access.id)
         if not model or model.client_id != access.client_id:
             return None
-        for field in ("access_type", "environment", "username", "host", "notes"):
+        for field in ("access_type_id", "environment", "port", "host", "notes"):
             setattr(model, field, getattr(access, field))
-        if access.password is not None:
-            from backend.infra.models.client_model import _encrypt
-            model.password = _encrypt(access.password)
         self._db.commit()
         self._db.refresh(model)
         return model.to_entity(include_sensitive=True)
@@ -125,7 +124,46 @@ class ClientRepository:
         self._db.commit()
         return True
 
-    # ── Adjuntos de la sección de accesos y conexiones (spec 018) ──────────────────
+    # ── Credenciales de un acceso (spec 031, UAT OBS-0041) ──────────────────────────
+
+    def list_credentials(self, access_id: uuid.UUID, include_sensitive: bool = False) -> list[ClientAccessCredential]:
+        models = (
+            self._db.query(ClientAccessCredentialModel)
+            .filter(ClientAccessCredentialModel.client_access_id == access_id)
+            .order_by(ClientAccessCredentialModel.created_at)
+            .all()
+        )
+        return [m.to_entity(include_sensitive=include_sensitive) for m in models]
+
+    def add_credential(self, credential: ClientAccessCredential) -> ClientAccessCredential:
+        model = ClientAccessCredentialModel.from_entity(credential)
+        self._db.add(model)
+        self._db.commit()
+        self._db.refresh(model)
+        return model.to_entity(include_sensitive=True)
+
+    def update_credential(self, credential: ClientAccessCredential) -> Optional[ClientAccessCredential]:
+        model = self._db.get(ClientAccessCredentialModel, credential.id)
+        if not model or model.client_access_id != credential.client_access_id:
+            return None
+        for field in ("label", "username", "notes"):
+            setattr(model, field, getattr(credential, field))
+        if credential.password is not None:
+            from backend.infra.models.client_model import _encrypt
+            model.password = _encrypt(credential.password)
+        self._db.commit()
+        self._db.refresh(model)
+        return model.to_entity(include_sensitive=True)
+
+    def delete_credential(self, access_id: uuid.UUID, credential_id: uuid.UUID) -> bool:
+        model = self._db.get(ClientAccessCredentialModel, credential_id)
+        if not model or model.client_access_id != access_id:
+            return False
+        self._db.delete(model)
+        self._db.commit()
+        return True
+
+    # ── Adjuntos de la sección de accesos y conexiones (spec 018, 031) ─────────────
 
     def list_access_attachments(self, client_id: uuid.UUID) -> list[ClientAccessAttachment]:
         models = (

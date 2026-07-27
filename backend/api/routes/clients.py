@@ -4,10 +4,11 @@ from flask import g, request, send_file
 from flask_restx import Namespace, Resource, fields
 from backend.infra.repositories.client_repo import ClientRepository
 from backend.infra.repositories.project_repo import ProjectRepository
+from backend.infra.repositories.catalog_repo import CatalogRepository
 from backend.infra.database import get_db
 from backend.infra.storage import attachments as attachment_storage
 from backend.domain.entities.client import (
-    Client, ClientSystem, ClientAccess, ClientAccessAttachment, ACCESS_TYPES, ACCESS_ENVIRONMENTS,
+    Client, ClientSystem, ClientAccess, ClientAccessCredential, ClientAccessAttachment, ACCESS_ENVIRONMENTS,
 )
 from backend.domain.services.client_service import ClientService, ClientBusinessError
 from backend.api.routes._shared import parse_uuid, error_model, server_error
@@ -95,13 +96,19 @@ _system_input = ns.model("ClientSystemInput", {
     "notes": fields.String(description="Notas"),
 })
 
+_access_type_ref = ns.model("ClientAccessTypeRef", {
+    "id": fields.String(description="UUID del tipo en catalog_access_types"),
+    "name": fields.String(description="Nombre del tipo (ej. VPN, Base de datos)"),
+    "color_index": fields.Integer(description="Índice de color estable (0-7), asignado automáticamente"),
+})
+
 _access_out = ns.model("ClientAccess", {
     "id": fields.String(description="UUID del acceso"),
     "client_id": fields.String(description="UUID del cliente"),
-    "access_type": fields.String(description="vpn | system_url | remote_desktop"),
-    "environment": fields.String(description="dev | test | prod (solo si access_type=system_url)"),
-    "username": fields.String(description="Usuario (solo si include_sensitive)"),
-    "password": fields.String(description="Contraseña (solo si include_sensitive)"),
+    "access_type_id": fields.String(description="UUID del tipo de acceso (catalog_access_types)"),
+    "access_type": fields.Nested(_access_type_ref, description="Tipo de acceso resuelto (solo lectura)"),
+    "environment": fields.String(description="dev | test | prod (aplica a cualquier tipo, spec 031)"),
+    "port": fields.Integer(description="Puerto del acceso, separado del host (spec 031)"),
     "host": fields.String(description="IP, URL o nombre de escritorio remoto"),
     "notes": fields.String(description="Notas"),
     "created_at": fields.String(description="Fecha de creación ISO-8601"),
@@ -113,17 +120,39 @@ _access_list_out = ns.model("ClientAccessList", {
 })
 
 _access_input = ns.model("ClientAccessInput", {
-    "access_type": fields.String(required=True, description="vpn | system_url | remote_desktop", example="vpn"),
-    "environment": fields.String(description="dev | test | prod (solo si access_type=system_url)"),
+    "access_type_id": fields.String(required=True, description="UUID del tipo de acceso (catalog_access_types)"),
+    "environment": fields.String(description="dev | test | prod (aplica a cualquier tipo, spec 031)"),
+    "port": fields.Integer(description="Puerto del acceso"),
+    "host": fields.String(description="IP, URL o nombre de escritorio remoto"),
+    "notes": fields.String(description="Notas"),
+})
+
+_credential_out = ns.model("ClientAccessCredential", {
+    "id": fields.String(description="UUID de la credencial"),
+    "client_access_id": fields.String(description="UUID del acceso"),
+    "label": fields.String(description="Etiqueta descriptiva"),
+    "username": fields.String(description="Usuario (solo si include_sensitive)"),
+    "password": fields.String(description="Contraseña (solo si include_sensitive)"),
+    "notes": fields.String(description="Notas"),
+    "created_at": fields.String(description="Fecha de creación ISO-8601"),
+    "updated_at": fields.String(description="Fecha de última actualización ISO-8601"),
+})
+
+_credential_list_out = ns.model("ClientAccessCredentialList", {
+    "items": fields.List(fields.Nested(_credential_out)),
+})
+
+_credential_input = ns.model("ClientAccessCredentialInput", {
+    "label": fields.String(description="Etiqueta descriptiva", example="Admin del workspace"),
     "username": fields.String(description="Usuario"),
     "password": fields.String(description="Contraseña"),
-    "host": fields.String(description="IP, URL o nombre de escritorio remoto"),
     "notes": fields.String(description="Notas"),
 })
 
 _access_attachment_out = ns.model("ClientAccessAttachment", {
     "id": fields.String(description="UUID del adjunto"),
     "client_id": fields.String(description="UUID del cliente"),
+    "client_access_id": fields.String(description="UUID del acceso al que está anclado (null = adjunto general, spec 031)"),
     "filename": fields.String(description="Nombre original del archivo"),
     "content_type": fields.String(description="Content-Type"),
     "size_bytes": fields.Integer(description="Tamaño en bytes"),
@@ -216,40 +245,65 @@ def _can_see_sensitive() -> bool:
     return g.current_user.role.name in ("Admin", "Coordinador")
 
 
-def _access_to_dict(access, include_sensitive: bool = False) -> dict:
+def _access_to_dict(access, db, include_sensitive: bool = False) -> dict:
+    access_type = CatalogRepository(db, "access-types").get_by_id(access.access_type_id)
     d = {
         "id": str(access.id),
         "client_id": str(access.client_id),
-        "access_type": access.access_type,
+        "access_type_id": str(access.access_type_id),
+        "access_type": access_type,
         "environment": access.environment,
+        "port": access.port,
         "host": access.host,
         "notes": access.notes,
         "created_at": access.created_at.isoformat() if access.created_at else None,
         "updated_at": access.updated_at.isoformat() if access.updated_at else None,
     }
-    if include_sensitive:
-        d["username"] = access.username
-        d["password"] = access.password
     return d
 
 
-def _validate_access_input(data: dict) -> str | None:
-    access_type = data.get("access_type")
-    if access_type not in ACCESS_TYPES:
-        return f"El campo 'access_type' debe ser uno de: {', '.join(ACCESS_TYPES)}"
+def _validate_access_input(data: dict, db) -> str | None:
+    """OBS-0041 (spec 031): access_type_id debe existir y estar activo en catalog_access_types;
+    environment aplica a cualquier tipo (ya no se restringe a un tipo particular)."""
+    access_type_id = parse_uuid(str(data.get("access_type_id", "")))
+    if not access_type_id:
+        return "El campo 'access_type_id' es requerido y debe ser un UUID válido"
+    catalog_item = CatalogRepository(db, "access-types").get_by_id(access_type_id)
+    if not catalog_item or not catalog_item["active"]:
+        return "El campo 'access_type_id' no corresponde a un tipo de acceso activo"
     environment = data.get("environment")
-    if environment is not None:
-        if access_type != "system_url":
-            return "El campo 'environment' solo aplica cuando access_type='system_url'"
-        if environment not in ACCESS_ENVIRONMENTS:
-            return f"El campo 'environment' debe ser uno de: {', '.join(ACCESS_ENVIRONMENTS)}"
+    if environment is not None and environment not in ACCESS_ENVIRONMENTS:
+        return f"El campo 'environment' debe ser uno de: {', '.join(ACCESS_ENVIRONMENTS)}"
+    port = data.get("port")
+    if port is not None:
+        try:
+            if int(port) <= 0:
+                return "El campo 'port' debe ser un entero positivo"
+        except (TypeError, ValueError):
+            return "El campo 'port' debe ser un entero positivo"
     return None
+
+
+def _credential_to_dict(credential, include_sensitive: bool = False) -> dict:
+    d = {
+        "id": str(credential.id),
+        "client_access_id": str(credential.client_access_id),
+        "label": credential.label,
+        "notes": credential.notes,
+        "created_at": credential.created_at.isoformat() if credential.created_at else None,
+        "updated_at": credential.updated_at.isoformat() if credential.updated_at else None,
+    }
+    if include_sensitive:
+        d["username"] = credential.username
+        d["password"] = credential.password
+    return d
 
 
 def _access_attachment_to_dict(attachment) -> dict:
     return {
         "id": str(attachment.id),
         "client_id": str(attachment.client_id),
+        "client_access_id": str(attachment.client_access_id) if attachment.client_access_id else None,
         "filename": attachment.filename,
         "content_type": attachment.content_type,
         "size_bytes": attachment.size_bytes,
@@ -589,7 +643,7 @@ class ClientAccessList(Resource):
     @ns.response(404, "Cliente no encontrado", _error)
     @ns.response(500, "Error interno del servidor", _error)
     def get(self, client_id: str):
-        """Listar los accesos y conexiones del cliente (spec 018, UAT OBS-0001)"""
+        """Listar los accesos y conexiones del cliente (spec 018, UAT OBS-0001; spec 031, OBS-0041)"""
         uid = parse_uuid(client_id)
         if not uid:
             return {"error": "validation_error", "message": "ID de cliente invalido"}, 400
@@ -599,7 +653,7 @@ class ClientAccessList(Resource):
             if not repo.get_by_id(uid):
                 return {"error": "not_found", "message": "Cliente no encontrado"}, 404
             include_sensitive = _can_see_sensitive()
-            items = [_access_to_dict(a, include_sensitive) for a in repo.list_access(uid, include_sensitive)]
+            items = [_access_to_dict(a, db, include_sensitive) for a in repo.list_access(uid, include_sensitive)]
             return {"items": items}, 200
         except Exception:
             return server_error()
@@ -613,28 +667,28 @@ class ClientAccessList(Resource):
     @ns.response(404, "Cliente no encontrado", _error)
     @ns.response(500, "Error interno del servidor", _error)
     def post(self, client_id: str):
-        """Agregar un acceso/conexión al cliente (spec 018, UAT OBS-0001)"""
+        """Agregar un acceso/conexión al cliente (spec 018, UAT OBS-0001; spec 031, OBS-0041)"""
         uid = parse_uuid(client_id)
         if not uid:
             return {"error": "validation_error", "message": "ID de cliente invalido"}, 400
         data = request.get_json(silent=True)
         if not data:
             return {"error": "validation_error", "message": "El cuerpo debe ser JSON"}, 400
-        validation_error = _validate_access_input(data)
-        if validation_error:
-            return {"error": "validation_error", "message": validation_error}, 400
         try:
             db = get_db()
+            validation_error = _validate_access_input(data, db)
+            if validation_error:
+                return {"error": "validation_error", "message": validation_error}, 400
             repo = ClientRepository(db)
             if not repo.get_by_id(uid):
                 return {"error": "not_found", "message": "Cliente no encontrado"}, 404
             access = ClientAccess.create(
-                client_id=uid, access_type=data["access_type"], environment=data.get("environment"),
-                username=data.get("username"), password=data.get("password"),
+                client_id=uid, access_type_id=parse_uuid(str(data["access_type_id"])),
+                environment=data.get("environment"), port=data.get("port"),
                 host=data.get("host"), notes=data.get("notes"),
             )
             created = repo.add_access(access)
-            return _access_to_dict(created, include_sensitive=True), 201
+            return _access_to_dict(created, db, include_sensitive=True), 201
         except Exception:
             return server_error()
 
@@ -667,19 +721,22 @@ class ClientAccessDetail(Resource):
             if not existing:
                 return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
             merged = {
-                "access_type": data.get("access_type", existing.access_type),
+                "access_type_id": data.get("access_type_id", str(existing.access_type_id)),
                 "environment": data.get("environment", existing.environment),
+                "port": data.get("port", existing.port),
             }
-            validation_error = _validate_access_input(merged)
+            validation_error = _validate_access_input(merged, db)
             if validation_error:
                 return {"error": "validation_error", "message": validation_error}, 400
-            for field in ("access_type", "environment", "username", "password", "host", "notes"):
+            if "access_type_id" in data:
+                existing.access_type_id = parse_uuid(str(data["access_type_id"]))
+            for field in ("environment", "port", "host", "notes"):
                 if field in data:
                     setattr(existing, field, data[field])
             updated = repo.update_access(existing)
             if not updated:
                 return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
-            return _access_to_dict(updated, include_sensitive=True), 200
+            return _access_to_dict(updated, db, include_sensitive=True), 200
         except Exception:
             return server_error()
 
@@ -700,6 +757,137 @@ class ClientAccessDetail(Resource):
             db = get_db()
             if not ClientRepository(db).delete_access(uid, aid):
                 return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
+            return "", 204
+        except Exception:
+            return server_error()
+
+
+def _get_owned_access(repo: ClientRepository, client_id: uuid.UUID, access_id: uuid.UUID):
+    return next((a for a in repo.list_access(client_id, include_sensitive=True) if a.id == access_id), None)
+
+
+@ns.route("/<string:client_id>/access/<string:access_id>/credentials")
+@ns.param("client_id", "UUID del cliente")
+@ns.param("access_id", "UUID del acceso")
+class ClientAccessCredentialList(Resource):
+    @ns.doc("list_client_access_credentials")
+    @ns.response(401, "No autenticado (token ausente o invalido)", _error)
+    @ns.response(403, "Sin el permiso requerido", _error)
+    @ns.response(200, "Credenciales del acceso", _credential_list_out)
+    @ns.response(400, "UUID inválido", _error)
+    @ns.response(404, "Cliente o acceso no encontrado", _error)
+    @ns.response(500, "Error interno del servidor", _error)
+    def get(self, client_id: str, access_id: str):
+        """Listar las credenciales de un acceso (spec 031, UAT OBS-0041)"""
+        uid = parse_uuid(client_id)
+        aid = parse_uuid(access_id)
+        if not uid or not aid:
+            return {"error": "validation_error", "message": "ID invalido"}, 400
+        try:
+            db = get_db()
+            repo = ClientRepository(db)
+            if not _get_owned_access(repo, uid, aid):
+                return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
+            include_sensitive = _can_see_sensitive()
+            items = [_credential_to_dict(c, include_sensitive) for c in repo.list_credentials(aid, include_sensitive)]
+            return {"items": items}, 200
+        except Exception:
+            return server_error()
+
+    @ns.doc("add_client_access_credential")
+    @ns.response(401, "No autenticado (token ausente o invalido)", _error)
+    @ns.response(403, "Sin el permiso requerido", _error)
+    @ns.expect(_credential_input, validate=False)
+    @ns.response(201, "Credencial creada", _credential_out)
+    @ns.response(400, "Datos inválidos", _error)
+    @ns.response(404, "Cliente o acceso no encontrado", _error)
+    @ns.response(500, "Error interno del servidor", _error)
+    def post(self, client_id: str, access_id: str):
+        """Agregar una credencial a un acceso (spec 031, UAT OBS-0041) — un acceso puede tener N credenciales"""
+        uid = parse_uuid(client_id)
+        aid = parse_uuid(access_id)
+        if not uid or not aid:
+            return {"error": "validation_error", "message": "ID invalido"}, 400
+        data = request.get_json(silent=True)
+        if not data:
+            return {"error": "validation_error", "message": "El cuerpo debe ser JSON"}, 400
+        try:
+            db = get_db()
+            repo = ClientRepository(db)
+            if not _get_owned_access(repo, uid, aid):
+                return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
+            credential = ClientAccessCredential.create(
+                client_access_id=aid, label=data.get("label"),
+                username=data.get("username"), password=data.get("password"), notes=data.get("notes"),
+            )
+            created = repo.add_credential(credential)
+            return _credential_to_dict(created, include_sensitive=True), 201
+        except Exception:
+            return server_error()
+
+
+@ns.route("/<string:client_id>/access/<string:access_id>/credentials/<string:credential_id>")
+@ns.param("client_id", "UUID del cliente")
+@ns.param("access_id", "UUID del acceso")
+@ns.param("credential_id", "UUID de la credencial")
+class ClientAccessCredentialDetail(Resource):
+    @ns.doc("update_client_access_credential")
+    @ns.response(401, "No autenticado (token ausente o invalido)", _error)
+    @ns.response(403, "Sin el permiso requerido", _error)
+    @ns.expect(_credential_input, validate=False)
+    @ns.response(200, "Credencial actualizada", _credential_out)
+    @ns.response(400, "Datos inválidos", _error)
+    @ns.response(404, "Cliente, acceso o credencial no encontrada", _error)
+    @ns.response(500, "Error interno del servidor", _error)
+    def patch(self, client_id: str, access_id: str, credential_id: str):
+        """Editar una credencial de un acceso (PATCH parcial)"""
+        uid = parse_uuid(client_id)
+        aid = parse_uuid(access_id)
+        cid = parse_uuid(credential_id)
+        if not uid or not aid or not cid:
+            return {"error": "validation_error", "message": "ID invalido"}, 400
+        data = request.get_json(silent=True)
+        if not data:
+            return {"error": "validation_error", "message": "El cuerpo debe ser JSON"}, 400
+        try:
+            db = get_db()
+            repo = ClientRepository(db)
+            if not _get_owned_access(repo, uid, aid):
+                return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
+            existing = next((c for c in repo.list_credentials(aid, include_sensitive=True) if c.id == cid), None)
+            if not existing:
+                return {"error": "not_found", "message": "Credencial no encontrada para ese acceso"}, 404
+            for field in ("label", "username", "password", "notes"):
+                if field in data:
+                    setattr(existing, field, data[field])
+            updated = repo.update_credential(existing)
+            if not updated:
+                return {"error": "not_found", "message": "Credencial no encontrada para ese acceso"}, 404
+            return _credential_to_dict(updated, include_sensitive=True), 200
+        except Exception:
+            return server_error()
+
+    @ns.doc("delete_client_access_credential")
+    @ns.response(401, "No autenticado (token ausente o invalido)", _error)
+    @ns.response(403, "Sin el permiso requerido", _error)
+    @ns.response(204, "Credencial eliminada")
+    @ns.response(400, "UUID inválido", _error)
+    @ns.response(404, "Cliente, acceso o credencial no encontrada", _error)
+    @ns.response(500, "Error interno del servidor", _error)
+    def delete(self, client_id: str, access_id: str, credential_id: str):
+        """Eliminar una credencial de un acceso — no afecta a las demás (FR-006)"""
+        uid = parse_uuid(client_id)
+        aid = parse_uuid(access_id)
+        cid = parse_uuid(credential_id)
+        if not uid or not aid or not cid:
+            return {"error": "validation_error", "message": "ID invalido"}, 400
+        try:
+            db = get_db()
+            repo = ClientRepository(db)
+            if not _get_owned_access(repo, uid, aid):
+                return {"error": "not_found", "message": "Acceso no encontrado para ese cliente"}, 404
+            if not repo.delete_credential(aid, cid):
+                return {"error": "not_found", "message": "Credencial no encontrada para ese acceso"}, 404
             return "", 204
         except Exception:
             return server_error()
@@ -738,22 +926,31 @@ class ClientAccessAttachments(Resource):
     @ns.response(404, "Cliente no encontrado", _error)
     @ns.response(500, "Error interno del servidor", _error)
     def post(self, client_id: str):
-        """Subir un adjunto a la sección de accesos y conexiones (ej. instructivo de instalación)"""
+        """Subir un adjunto a la sección de accesos y conexiones (ej. instructivo de instalación);
+        `client_access_id` (opcional, spec 031) lo ancla a un acceso puntual en vez de dejarlo general"""
         uid = parse_uuid(client_id)
         if not uid:
             return {"error": "validation_error", "message": "ID de cliente invalido"}, 400
         file = request.files.get("file")
         if not file or not file.filename:
             return {"error": "validation_error", "message": "El campo 'file' es requerido"}, 400
+        raw_access_id = request.form.get("client_access_id")
+        access_id = None
+        if raw_access_id:
+            access_id = parse_uuid(raw_access_id)
+            if not access_id:
+                return {"error": "validation_error", "message": "El campo 'client_access_id' debe ser un UUID válido"}, 400
         try:
             db = get_db()
             repo = ClientRepository(db)
             if not repo.get_by_id(uid):
                 return {"error": "not_found", "message": "Cliente no encontrado"}, 404
+            if access_id and not _get_owned_access(repo, uid, access_id):
+                return {"error": "validation_error", "message": "El acceso indicado no pertenece a este cliente"}, 400
             content = file.read()
             path = attachment_storage.save(uid, file.filename, content, entity_kind="clients")
             attachment = ClientAccessAttachment(
-                id=uuid.uuid4(), client_id=uid, filename=file.filename,
+                id=uuid.uuid4(), client_id=uid, client_access_id=access_id, filename=file.filename,
                 content_type=file.content_type or "application/octet-stream",
                 size_bytes=len(content), storage_path=path,
             )
@@ -824,5 +1021,6 @@ from backend.api.middleware.rbac import enforce_module as _enforce
 for _cls in (ClientList, ClientDetail, ClientDeactivate, ClientActivate,
              ClientSystems, ClientSystemDetail,
              ClientAccessList, ClientAccessDetail,
+             ClientAccessCredentialList, ClientAccessCredentialDetail,
              ClientAccessAttachments, ClientAccessAttachmentDetail):
     _cls.method_decorators = [_enforce("clients")]

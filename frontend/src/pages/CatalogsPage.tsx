@@ -3,13 +3,13 @@ import { Button, Card, Col, Form, Input, Row, Table, Tooltip, message } from 'an
 import { PlusOutlined, StopOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { catalogService } from '../services/catalogService'
 import type { CatalogItem, CatalogName } from '../types/catalog'
-import { CATALOG_LABELS } from '../types/catalog'
+import { CATALOG_LABELS, CATALOG_COLOR_PALETTE } from '../types/catalog'
 import StatusTag from '../components/common/StatusTag'
 import { clientColumnFilter, clientTextColumnFilter } from '../components/common/columnFilters'
 import { useAuthStore } from '../store/authStore'
 import { palette } from '../theme'
 
-const CATALOGS: CatalogName[] = ['tools', 'processes', 'resolution-types', 'record-types', 'teams']
+const CATALOGS: CatalogName[] = ['tools', 'processes', 'resolution-types', 'record-types', 'teams', 'access-types']
 
 function CatalogCard({ catalog }: { catalog: CatalogName }) {
   const { hasPermission } = useAuthStore()
@@ -58,6 +58,15 @@ function CatalogCard({ catalog }: { catalog: CatalogName }) {
       <Table
         rowKey="id" size="small" loading={loading} dataSource={items} pagination={false}
         columns={[
+          ...(catalog === 'access-types' ? [{
+            title: '', dataIndex: 'color_index', width: 32,
+            render: (v: number | undefined) => (
+              <span style={{
+                display: 'inline-block', width: 12, height: 12, borderRadius: 3,
+                background: CATALOG_COLOR_PALETTE[(v ?? 0) % CATALOG_COLOR_PALETTE.length],
+              }} />
+            ),
+          }] : []),
           {
             title: 'Nombre', dataIndex: 'name',
             ...clientTextColumnFilter<CatalogItem>('Buscar nombre...', r => r.name),

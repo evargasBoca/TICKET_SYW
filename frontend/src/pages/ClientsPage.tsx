@@ -5,22 +5,32 @@ import type { ColumnsType, TableProps } from 'antd/es/table'
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
 import { clientService } from '../services/clientService'
+import { catalogService } from '../services/catalogService'
+import { CATALOG_COLOR_PALETTE } from '../types/catalog'
 import { COUNTRIES } from '../data/countries'
 import { TIMEZONES } from '../data/timezones'
 import apiClient from '../services/apiClient'
 import type {
   ClientListItem, ClientDetail, ClientFormData, ClientSystem, ClientSystemFormData,
-  ClientAccess, ClientAccessFormData, ClientAccessAttachment, ClientAccessType,
+  ClientAccess, ClientAccessFormData, ClientAccessCredential, ClientAccessCredentialFormData,
+  ClientAccessAttachment, AccessTypeCatalogItem,
 } from '../types/client'
 
-const ACCESS_TYPE_OPTIONS: { value: ClientAccessType; label: string }[] = [
-  { value: 'vpn', label: 'VPN' },
-  { value: 'system_url', label: 'URL de sistema' },
-  { value: 'remote_desktop', label: 'Escritorio remoto' },
-]
 const ENVIRONMENT_OPTIONS = [
   { value: 'dev', label: 'DEV' }, { value: 'test', label: 'TEST' }, { value: 'prod', label: 'PROD' },
 ]
+
+function AccessTypeBadge({ type }: { type: AccessTypeCatalogItem }) {
+  return (
+    <Space size={6}>
+      <span style={{
+        display: 'inline-block', width: 10, height: 10, borderRadius: 3,
+        background: CATALOG_COLOR_PALETTE[type.color_index % CATALOG_COLOR_PALETTE.length],
+      }} />
+      {type.name}
+    </Space>
+  )
+}
 import ConfirmationModal from '../components/common/ConfirmationModal'
 import { mapApiErrorToFormFields, type FieldErrorRule } from '../services/formErrorMapper'
 
@@ -55,13 +65,19 @@ export default function ClientsPage() {
   const [selectedDetail, setSelectedDetail] = useState<ClientDetail | null>(null)
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: string; impact: string } | null>(null)
   const [systems, setSystems] = useState<ClientSystem[]>([])
+  const [accessTypes, setAccessTypes] = useState<AccessTypeCatalogItem[]>([])
   const [accessList, setAccessList] = useState<ClientAccess[]>([])
   const [accessAttachments, setAccessAttachments] = useState<ClientAccessAttachment[]>([])
-  const [revealAccessId, setRevealAccessId] = useState<string | null>(null)
   const [editingAccessId, setEditingAccessId] = useState<string | null>(null)
+  const [credentialsByAccess, setCredentialsByAccess] = useState<Record<string, ClientAccessCredential[]>>({})
+  const [revealCredentialId, setRevealCredentialId] = useState<string | null>(null)
+  const [editingCredential, setEditingCredential] = useState<{ accessId: string; credentialId: string } | null>(null)
   const [form] = Form.useForm<ClientFormData>()
   const [systemForm] = Form.useForm<ClientSystemFormData>()
   const [accessForm] = Form.useForm<ClientAccessFormData>()
+  const [credentialForm] = Form.useForm<ClientAccessCredentialFormData>()
+
+  useEffect(() => { catalogService.list('access-types').then(res => setAccessTypes(res.items as AccessTypeCatalogItem[])) }, [])
 
   const load = async () => {
     setLoading(true)
@@ -97,9 +113,12 @@ export default function ClientsPage() {
     setSystems([])
     setAccessList([])
     setAccessAttachments([])
-    setRevealAccessId(null)
+    setCredentialsByAccess({})
+    setRevealCredentialId(null)
     setEditingAccessId(null)
+    setEditingCredential(null)
     accessForm.resetFields()
+    credentialForm.resetFields()
     const detail = await clientService.get(id)
     setSelectedDetail(detail)
     setSystems(await clientService.listSystems(id))
@@ -130,9 +149,8 @@ export default function ClientsPage() {
   const openEditAccess = (access: ClientAccess) => {
     setEditingAccessId(access.id)
     accessForm.setFieldsValue({
-      access_type: access.access_type, environment: access.environment ?? undefined,
-      username: access.username ?? undefined, password: access.password ?? undefined,
-      host: access.host ?? undefined, notes: access.notes ?? undefined,
+      access_type_id: access.access_type_id, environment: access.environment ?? undefined,
+      port: access.port ?? undefined, host: access.host ?? undefined, notes: access.notes ?? undefined,
     })
   }
 
@@ -143,10 +161,50 @@ export default function ClientsPage() {
     message.success('Acceso eliminado')
   }
 
-  const handleUploadAccessAttachment = async (file: File) => {
+  const loadCredentials = async (accessId: string) => {
+    if (!selectedDetail) return
+    const items = await clientService.listCredentials(selectedDetail.id, accessId)
+    setCredentialsByAccess(prev => ({ ...prev, [accessId]: items }))
+  }
+
+  const handleCredentialSubmit = async (accessId: string, values: ClientAccessCredentialFormData) => {
+    if (!selectedDetail) return
+    try {
+      if (editingCredential && editingCredential.accessId === accessId) {
+        await clientService.updateCredential(selectedDetail.id, accessId, editingCredential.credentialId, values)
+        message.success('Credencial actualizada')
+      } else {
+        await clientService.addCredential(selectedDetail.id, accessId, values)
+        message.success('Credencial agregada')
+      }
+      credentialForm.resetFields()
+      setEditingCredential(null)
+      await loadCredentials(accessId)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Error al guardar la credencial'
+      message.error(msg)
+    }
+  }
+
+  const openEditCredential = (accessId: string, credential: ClientAccessCredential) => {
+    setEditingCredential({ accessId, credentialId: credential.id })
+    credentialForm.setFieldsValue({
+      label: credential.label ?? undefined, username: credential.username ?? undefined,
+      password: credential.password ?? undefined, notes: credential.notes ?? undefined,
+    })
+  }
+
+  const handleDeleteCredential = async (accessId: string, credentialId: string) => {
+    if (!selectedDetail) return
+    await clientService.deleteCredential(selectedDetail.id, accessId, credentialId)
+    await loadCredentials(accessId)
+    message.success('Credencial eliminada')
+  }
+
+  const handleUploadAccessAttachment = async (file: File, accessId?: string) => {
     if (!selectedDetail) return false
     try {
-      await clientService.uploadAccessAttachment(selectedDetail.id, file)
+      await clientService.uploadAccessAttachment(selectedDetail.id, file, accessId)
       setAccessAttachments(await clientService.listAccessAttachments(selectedDetail.id))
       message.success('Adjunto subido')
     } catch (err: unknown) {
@@ -351,20 +409,94 @@ export default function ClientsPage() {
                       dataSource={accessList}
                       pagination={false}
                       locale={{ emptyText: 'Sin accesos registrados' }}
-                      columns={[
-                        { title: 'Tipo', dataIndex: 'access_type', render: (v: string) => ACCESS_TYPE_OPTIONS.find(o => o.value === v)?.label ?? v },
-                        { title: 'Ambiente', dataIndex: 'environment', render: (v: string | null) => v ? v.toUpperCase() : '—' },
-                        { title: 'Usuario', dataIndex: 'username', render: (v: string | null) => canSeeSensitive ? (v ?? '—') : '—' },
-                        {
-                          title: 'Contraseña', dataIndex: 'password',
-                          render: (v: string | null, row: ClientAccess) => canSeeSensitive ? (
-                            <Space>
-                              {revealAccessId === row.id ? (v ?? '—') : '••••••••'}
-                              <Button size="small" type="link" icon={revealAccessId === row.id ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                                onClick={() => setRevealAccessId(id => id === row.id ? null : row.id)} />
+                      expandable={{
+                        onExpand: (expanded, row) => { if (expanded && !credentialsByAccess[row.id]) loadCredentials(row.id) },
+                        expandedRowRender: (row: ClientAccess) => {
+                          const credentials = credentialsByAccess[row.id] ?? []
+                          const attachmentsForAccess = accessAttachments.filter(a => a.client_access_id === row.id)
+                          const isEditingHere = editingCredential?.accessId === row.id
+                          return (
+                            <Space direction="vertical" style={{ width: '100%' }}>
+                              <strong>Credenciales</strong>
+                              <Table
+                                rowKey="id" size="small" pagination={false}
+                                dataSource={credentials}
+                                locale={{ emptyText: 'Sin credenciales registradas' }}
+                                columns={[
+                                  { title: 'Etiqueta', dataIndex: 'label', render: (v: string | null) => v ?? '—' },
+                                  { title: 'Usuario', dataIndex: 'username', render: (v: string | null) => canSeeSensitive ? (v ?? '—') : '—' },
+                                  {
+                                    title: 'Contraseña', dataIndex: 'password',
+                                    render: (v: string | null, cred: ClientAccessCredential) => canSeeSensitive ? (
+                                      <Space>
+                                        {revealCredentialId === cred.id ? (v ?? '—') : '••••••••'}
+                                        <Button size="small" type="link" icon={revealCredentialId === cred.id ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                                          onClick={() => setRevealCredentialId(id => id === cred.id ? null : cred.id)} />
+                                      </Space>
+                                    ) : '—',
+                                  },
+                                  { title: 'Notas', dataIndex: 'notes', render: (v: string | null) => v ?? '—' },
+                                  ...(canManage ? [{
+                                    title: '', key: 'actions',
+                                    render: (_: unknown, cred: ClientAccessCredential) => (
+                                      <Space>
+                                        <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEditCredential(row.id, cred)} />
+                                        <Button size="small" danger type="text" icon={<DeleteOutlined />} onClick={() => handleDeleteCredential(row.id, cred.id)} />
+                                      </Space>
+                                    ),
+                                  }] : []),
+                                ]}
+                              />
+                              {canManage && (
+                                <Form form={credentialForm} layout="inline"
+                                  onFinish={values => handleCredentialSubmit(row.id, values)} style={{ rowGap: 8 }}>
+                                  <Form.Item name="label"><Input placeholder="Etiqueta" style={{ width: 140 }} /></Form.Item>
+                                  <Form.Item name="username"><Input placeholder="Usuario" style={{ width: 120 }} /></Form.Item>
+                                  <Form.Item name="password"><Input.Password placeholder="Contraseña" style={{ width: 140 }} /></Form.Item>
+                                  <Form.Item name="notes"><Input placeholder="Notas" style={{ width: 140 }} /></Form.Item>
+                                  <Form.Item>
+                                    <Space>
+                                      <Button htmlType="submit" icon={<PlusOutlined />}>{isEditingHere ? 'Guardar' : 'Agregar'}</Button>
+                                      {isEditingHere && (
+                                        <Button onClick={() => { setEditingCredential(null); credentialForm.resetFields() }}>Cancelar</Button>
+                                      )}
+                                    </Space>
+                                  </Form.Item>
+                                </Form>
+                              )}
+                              <strong>Adjuntos de este acceso</strong>
+                              <Table
+                                rowKey="id" size="small" pagination={false}
+                                dataSource={attachmentsForAccess}
+                                locale={{ emptyText: 'Sin adjuntos anclados a este acceso' }}
+                                columns={[
+                                  { title: 'Archivo', dataIndex: 'filename' },
+                                  {
+                                    title: '', key: 'actions',
+                                    render: (_: unknown, a: ClientAccessAttachment) => (
+                                      <Space>
+                                        <Button size="small" type="text" icon={<DownloadOutlined />} onClick={() => handleDownloadAccessAttachment(a)} />
+                                        {canManage && (
+                                          <Button size="small" danger type="text" icon={<DeleteOutlined />} onClick={() => handleDeleteAccessAttachment(a.id)} />
+                                        )}
+                                      </Space>
+                                    ),
+                                  },
+                                ]}
+                              />
+                              {canManage && (
+                                <Upload beforeUpload={file => handleUploadAccessAttachment(file, row.id)} showUploadList={false}>
+                                  <Button size="small" icon={<UploadOutlined />}>Adjuntar a este acceso</Button>
+                                </Upload>
+                              )}
                             </Space>
-                          ) : '—',
+                          )
                         },
+                      }}
+                      columns={[
+                        { title: 'Tipo', dataIndex: 'access_type', render: (v: AccessTypeCatalogItem) => <AccessTypeBadge type={v} /> },
+                        { title: 'Ambiente', dataIndex: 'environment', render: (v: string | null) => v ? v.toUpperCase() : '—' },
+                        { title: 'Puerto', dataIndex: 'port', render: (v: number | null) => v ?? '—' },
                         { title: 'Host/IP/URL', dataIndex: 'host' },
                         { title: 'Notas', dataIndex: 'notes' },
                         ...(canManage ? [{
@@ -380,14 +512,14 @@ export default function ClientsPage() {
                     />
                     {canManage && (
                       <Form form={accessForm} layout="inline" onFinish={handleAccessSubmit} style={{ marginTop: 8, rowGap: 8 }}>
-                        <Form.Item name="access_type" rules={[{ required: true, message: 'Tipo requerido' }]}>
-                          <Select placeholder="Tipo" style={{ width: 150 }} options={ACCESS_TYPE_OPTIONS} />
+                        <Form.Item name="access_type_id" rules={[{ required: true, message: 'Tipo requerido' }]}>
+                          <Select placeholder="Tipo" style={{ width: 170 }}
+                            options={accessTypes.map(t => ({ value: t.id, label: <AccessTypeBadge type={t} /> }))} />
                         </Form.Item>
                         <Form.Item name="environment">
                           <Select placeholder="Ambiente" allowClear style={{ width: 100 }} options={ENVIRONMENT_OPTIONS} />
                         </Form.Item>
-                        <Form.Item name="username"><Input placeholder="Usuario" style={{ width: 120 }} /></Form.Item>
-                        <Form.Item name="password"><Input.Password placeholder="Contraseña" style={{ width: 140 }} /></Form.Item>
+                        <Form.Item name="port"><InputNumber placeholder="Puerto" min={1} style={{ width: 100 }} /></Form.Item>
                         <Form.Item name="host"><Input placeholder="Host/IP/URL" style={{ width: 160 }} /></Form.Item>
                         <Form.Item name="notes"><Input placeholder="Notas" style={{ width: 140 }} /></Form.Item>
                         <Form.Item>
@@ -401,13 +533,13 @@ export default function ClientsPage() {
                       </Form>
                     )}
 
-                    <Divider style={{ margin: '12px 0' }}>Adjuntos (instructivos de instalación/configuración)</Divider>
+                    <Divider style={{ margin: '12px 0' }}>Adjuntos generales (sin acceso asociado)</Divider>
                     <Table
                       rowKey="id"
                       size="small"
-                      dataSource={accessAttachments}
+                      dataSource={accessAttachments.filter(a => !a.client_access_id)}
                       pagination={false}
-                      locale={{ emptyText: 'Sin adjuntos' }}
+                      locale={{ emptyText: 'Sin adjuntos generales' }}
                       columns={[
                         { title: 'Archivo', dataIndex: 'filename' },
                         {
@@ -424,8 +556,8 @@ export default function ClientsPage() {
                       ]}
                     />
                     {canManage && (
-                      <Upload beforeUpload={handleUploadAccessAttachment} showUploadList={false}>
-                        <Button icon={<UploadOutlined />}>Adjuntar archivo</Button>
+                      <Upload beforeUpload={file => handleUploadAccessAttachment(file)} showUploadList={false}>
+                        <Button icon={<UploadOutlined />}>Adjuntar archivo general</Button>
                       </Upload>
                     )}
                   </Space>

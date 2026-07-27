@@ -4,7 +4,9 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, LargeBinary, Numeri
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func, text
 from backend.infra.models import Base
-from backend.domain.entities.client import Client, ClientSystem, ClientAccess, ClientAccessAttachment
+from backend.domain.entities.client import (
+    Client, ClientSystem, ClientAccess, ClientAccessCredential, ClientAccessAttachment,
+)
 
 _PGCRYPTO_KEY_ENV = "PGCRYPTO_KEY"
 
@@ -118,15 +120,19 @@ class ClientSystemModel(Base):
 
 
 class ClientAccessModel(Base):
-    """Acceso/conexión de un cliente (spec 018, reemplaza clients.vpn_ips/vpn_credentials)."""
+    """Acceso/conexión de un cliente (spec 018, reemplaza clients.vpn_ips/vpn_credentials;
+    spec 031 — access_type_id/port, UAT OBS-0041). `access_type`/`username`/`password` quedan
+    legacy (no se leen/escriben desde la API nueva) — ver client_access_credentials."""
     __tablename__ = "client_access"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
-    access_type = Column(Text, nullable=False)
+    access_type = Column(Text, nullable=False)  # legacy (spec 018), ver access_type_id
+    access_type_id = Column(UUID(as_uuid=True), ForeignKey("catalog_access_types.id"), nullable=False)
     environment = Column(Text, nullable=True)
-    username = Column(Text, nullable=True)
-    password = Column(LargeBinary, nullable=True)
+    port = Column(Integer, nullable=True)
+    username = Column(Text, nullable=True)  # legacy (spec 018), ver ClientAccessCredentialModel
+    password = Column(LargeBinary, nullable=True)  # legacy (spec 018), ídem
     host = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
@@ -136,10 +142,9 @@ class ClientAccessModel(Base):
         return ClientAccess(
             id=self.id,
             client_id=self.client_id,
-            access_type=self.access_type,
+            access_type_id=self.access_type_id,
             environment=self.environment,
-            username=self.username if include_sensitive else None,
-            password=_decrypt(self.password) if include_sensitive else None,
+            port=self.port,
             host=self.host,
             notes=self.notes,
             created_at=self.created_at,
@@ -151,21 +156,61 @@ class ClientAccessModel(Base):
         return cls(
             id=access.id,
             client_id=access.client_id,
-            access_type=access.access_type,
+            access_type_id=access.access_type_id,
+            access_type=None,  # columna legacy, ya no se alimenta desde altas nuevas
             environment=access.environment,
-            username=access.username,
-            password=_encrypt(access.password),
+            port=access.port,
             host=access.host,
             notes=access.notes,
         )
 
 
+class ClientAccessCredentialModel(Base):
+    """Credencial (usuario/contraseña) de un acceso de cliente (spec 031, UAT OBS-0041) —
+    1 acceso ──< N credenciales, reemplaza username/password embebidos en ClientAccessModel."""
+    __tablename__ = "client_access_credentials"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
+    client_access_id = Column(UUID(as_uuid=True), ForeignKey("client_access.id", ondelete="CASCADE"), nullable=False)
+    label = Column(Text, nullable=True)
+    username = Column(Text, nullable=True)
+    password = Column(LargeBinary, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    def to_entity(self, include_sensitive: bool = False) -> ClientAccessCredential:
+        return ClientAccessCredential(
+            id=self.id,
+            client_access_id=self.client_access_id,
+            label=self.label,
+            username=self.username if include_sensitive else None,
+            password=_decrypt(self.password) if include_sensitive else None,
+            notes=self.notes,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_entity(cls, credential: ClientAccessCredential) -> "ClientAccessCredentialModel":
+        return cls(
+            id=credential.id,
+            client_access_id=credential.client_access_id,
+            label=credential.label,
+            username=credential.username,
+            password=_encrypt(credential.password),
+            notes=credential.notes,
+        )
+
+
 class ClientAccessAttachmentModel(Base):
-    """Adjunto de la sección de accesos y conexiones de un cliente (spec 018)."""
+    """Adjunto de la sección de accesos y conexiones de un cliente (spec 018); opcionalmente
+    anclado a un acceso puntual (spec 031, UAT OBS-0041)."""
     __tablename__ = "client_access_attachments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    client_access_id = Column(UUID(as_uuid=True), ForeignKey("client_access.id", ondelete="SET NULL"), nullable=True)
     filename = Column(Text, nullable=False)
     content_type = Column(Text, nullable=False)
     size_bytes = Column(Integer, nullable=False)
@@ -176,6 +221,7 @@ class ClientAccessAttachmentModel(Base):
         return ClientAccessAttachment(
             id=self.id,
             client_id=self.client_id,
+            client_access_id=self.client_access_id,
             filename=self.filename,
             content_type=self.content_type,
             size_bytes=self.size_bytes,
@@ -188,6 +234,7 @@ class ClientAccessAttachmentModel(Base):
         return cls(
             id=attachment.id,
             client_id=attachment.client_id,
+            client_access_id=attachment.client_access_id,
             filename=attachment.filename,
             content_type=attachment.content_type,
             size_bytes=attachment.size_bytes,
