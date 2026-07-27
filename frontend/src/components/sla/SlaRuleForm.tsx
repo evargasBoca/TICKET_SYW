@@ -100,7 +100,8 @@ export default function SlaRuleForm({ form, projects, editing, onFinish }: SlaRu
           placeholder="Seleccionar proyecto"
           showSearch
           optionFilterProp="label"
-          options={projects.map(p => ({ value: p.id, label: p.name }))}
+          // OBS-0043 (spec 030): incluye el cliente para distinguir proyectos homónimos (ej. dos "Soporte").
+          options={projects.map(p => ({ value: p.id, label: `${p.client_name} — ${p.name}` }))}
         />
       </Form.Item>
       <Form.Item name="priority" label="Prioridad"

@@ -12,6 +12,7 @@ from backend.api.routes._shared import parse_uuid, error_model, server_error
 from backend.domain.entities.sla_rule import PRIORITIES, SLA_FIELD_MAX_MINUTES, SlaRule
 from backend.domain.errors import DomainError
 from backend.infra.database import get_db
+from backend.infra.repositories.client_repo import ClientRepository
 from backend.infra.repositories.project_repo import ProjectRepository
 from backend.infra.repositories.sla_rule_repo import SlaRuleRepository
 
@@ -36,6 +37,8 @@ _sla_rule_out = ns.model("SlaRule", {
     "id": fields.String(),
     "project_id": fields.String(),
     "project_name": fields.String(),
+    "client_id": fields.String(description="OBS-0043: cliente del proyecto, para distinguir proyectos homónimos"),
+    "client_name": fields.String(),
     "priority": fields.String(),
     "contact_minutes": fields.Integer(),
     "execution_minutes": fields.Integer(),
@@ -53,10 +56,15 @@ _sla_rule_list_out = ns.model("SlaRuleList", {
 
 def _serialize(rule: SlaRule, db) -> dict:
     project = ProjectRepository(db).get_by_id(rule.project_id)
+    # OBS-0043 (spec 030): expone el cliente del proyecto para distinguir proyectos homónimos
+    # (ej. "Soporte" de Aris vs. Vaxthera) en el filtro/formulario/tabla de SLA Configurable.
+    client = ClientRepository(db).get_by_id(project.client_id) if project else None
     return {
         "id": str(rule.id),
         "project_id": str(rule.project_id),
         "project_name": project.name if project else None,
+        "client_id": str(client.id) if client else None,
+        "client_name": client.name if client else None,
         "priority": rule.priority,
         "contact_minutes": rule.contact_minutes,
         "execution_minutes": rule.execution_minutes,

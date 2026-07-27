@@ -104,6 +104,8 @@ export default function SlaRulesPage() {
   }
 
   const columns: ColumnsType<SlaRule> = [
+    // OBS-0043 (spec 030): columna Cliente, para distinguir proyectos homónimos de distintos clientes.
+    { title: 'Cliente', dataIndex: 'client_name', render: (v: string | null) => v ?? '—' },
     { title: 'Proyecto', dataIndex: 'project_name', render: (v: string | null) => v ?? '—' },
     {
       title: 'Prioridad', dataIndex: 'priority',
@@ -137,7 +139,8 @@ export default function SlaRulesPage() {
             allowClear
             placeholder="Filtrar por proyecto"
             style={{ width: 260 }}
-            options={projects.map(p => ({ value: p.id, label: p.name }))}
+            // OBS-0043 (spec 030): incluye el cliente para distinguir proyectos homónimos (ej. dos "Soporte").
+            options={projects.map(p => ({ value: p.id, label: `${p.client_name} — ${p.name}` }))}
             value={projectFilter}
             onChange={setProjectFilter}
           />

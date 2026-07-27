@@ -9,6 +9,9 @@ export interface SlaRule {
   id: string
   project_id: string
   project_name: string | null
+  /** OBS-0043 (spec 030): cliente del proyecto, para distinguir proyectos homónimos de distintos clientes. */
+  client_id: string | null
+  client_name: string | null
   priority: Priority
   contact_minutes: number
   execution_minutes: number

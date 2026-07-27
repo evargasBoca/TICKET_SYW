@@ -203,8 +203,8 @@ export default function TicketDetailPage() {
       </Space>
 
       <Row gutter={16}>
-        {/* ── Columna principal: descripción → resumen de tiempo → comentarios → actividad,
-             en un único flujo consolidado (Fase 2.2, US1 FR-004) ── */}
+        {/* ── Columna principal: descripción → resumen de tiempo → clasificación → actividad
+             (OBS-0042, spec 030: "Comentarios y acciones" se movió al sidebar) ── */}
         <Col xs={24} lg={14}>
           <Card title="Descripción" size="small">
             <RichTextViewer html={ticket.description} />
@@ -245,90 +245,6 @@ export default function TicketDetailPage() {
               onSummary={setTimeSummary}
               onModalClose={() => setTimeExpanded(true)}
             />
-          </Card>
-
-          <Card title={isTask ? 'Estado y comentarios' : 'Comentarios y acciones'} size="small" style={{ marginTop: 16 }}>
-            {isTask && (
-              <>
-                <TaskStatusChanger ticket={ticket} onUpdated={load} />
-                <Divider style={{ margin: '12px 0' }} />
-              </>
-            )}
-            <CommentThread ticketId={ticket.id} comments={ticket.comments} />
-            <Divider style={{ margin: '12px 0' }} />
-            <CommentComposer ticket={ticket} resolutionTypes={resolutionTypes} onUpdated={load}
-              restrictToInternal={isTask} />
-          </Card>
-
-          <Card title="Historial de estados" size="small" style={{ marginTop: 16 }}>
-            {ticket.transitions.length === 0
-              ? <em>Sin transiciones todavía</em>
-              : ticket.transitions.map(t => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 6 }}>
-                  <TicketStatusTag status={t.from_status as TicketDetail['status']} />
-                  <span style={{ color: palette.slate400 }}>→</span>
-                  <TicketStatusTag status={t.to_status as TicketDetail['status']} />
-                  <span style={{ color: palette.slate400, marginLeft: 4 }}>{new Date(t.created_at).toLocaleString('es-CO')}</span>
-                  {t.elapsed_seconds != null && (
-                    <span style={{ color: palette.slate400 }}>· {formatDuration(t.elapsed_seconds)} en el estado anterior</span>
-                  )}
-                  {t.sla_met === true && (
-                    <Tooltip title="Cumplió el SLA de esta fase">
-                      <span>✅</span>
-                    </Tooltip>
-                  )}
-                  {t.sla_met === false && (
-                    <Tooltip title="Incumplió el SLA de esta fase">
-                      <span>⚠️</span>
-                    </Tooltip>
-                  )}
-                </div>
-              ))}
-          </Card>
-
-          {ticket.reassignments.length > 0 && (
-            <Card title="Reasignaciones" size="small" style={{ marginTop: 16 }}>
-              {ticket.reassignments.map(r => (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span>{r.previous_assignee_name ?? 'Sin resolutor previo'}</span>
-                  <span style={{ color: palette.slate400 }}>➡️</span>
-                  <span>{r.new_assignee_name}</span>
-                  <span style={{ color: palette.slate400, marginLeft: 4 }}>{new Date(r.created_at).toLocaleString('es-CO')}</span>
-                  {r.reason && <span style={{ color: palette.slate400 }}>· {r.reason}</span>}
-                </div>
-              ))}
-            </Card>
-          )}
-        </Col>
-
-        {/* ── Sidebar: SLA / Focus Room / Subtareas + clasificación ── */}
-        <Col xs={24} lg={10}>
-          <Card
-            size="small"
-            title={<span><ClockCircleOutlined style={{ color: vivid.red.text, marginRight: 8 }} />SLA</span>}
-            style={{ borderColor: palette.slate200, background: palette.slate50 }}
-          >
-            <SlaCounter sla={ticket.sla} hasAssignee={ticket.assignee != null} />
-          </Card>
-
-          <Card
-            size="small"
-            title={<span><FieldTimeOutlined style={{ color: vivid.purple.text, marginRight: 8 }} />Sesión de trabajo (Focus Room)</span>}
-            style={{ marginTop: 16, borderColor: palette.slate200, background: palette.slate50 }}
-          >
-            <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
-              <div style={{ fontSize: 26, fontWeight: 700, color: palette.slate400, fontFamily: 'ui-monospace, monospace' }}>
-                00:00:00
-              </div>
-              <div style={{ fontSize: 11, color: palette.slate400, marginBottom: 10 }}>
-                Tiempo efectivo dedicado a este ticket
-              </div>
-              <Tooltip title="Modo de trabajo enfocado en un solo ticket, con asistente IA — llega en Fase 7">
-                <Button size="small" icon={<PlayCircleOutlined />} disabled style={{ width: '100%' }}>
-                  Iniciar sesión · Fase 7
-                </Button>
-              </Tooltip>
-            </div>
           </Card>
 
           <Card title="Clasificación" size="small" style={{ marginTop: 16 }}>
@@ -482,6 +398,98 @@ export default function TicketDetailPage() {
                 Guardar cambios
               </Button>
             )}
+          </Card>
+
+          <Card title="Historial de estados" size="small" style={{ marginTop: 16 }}>
+            {ticket.transitions.length === 0
+              ? <em>Sin transiciones todavía</em>
+              : ticket.transitions.map(t => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 6 }}>
+                  <TicketStatusTag status={t.from_status as TicketDetail['status']} />
+                  <span style={{ color: palette.slate400 }}>→</span>
+                  <TicketStatusTag status={t.to_status as TicketDetail['status']} />
+                  <span style={{ color: palette.slate400, marginLeft: 4 }}>{new Date(t.created_at).toLocaleString('es-CO')}</span>
+                  {t.elapsed_seconds != null && (
+                    <span style={{ color: palette.slate400 }}>· {formatDuration(t.elapsed_seconds)} en el estado anterior</span>
+                  )}
+                  {t.sla_met === true && (
+                    <Tooltip title="Cumplió el SLA de esta fase">
+                      <span>✅</span>
+                    </Tooltip>
+                  )}
+                  {t.sla_met === false && (
+                    <Tooltip title="Incumplió el SLA de esta fase">
+                      <span>⚠️</span>
+                    </Tooltip>
+                  )}
+                </div>
+              ))}
+          </Card>
+
+          {ticket.reassignments.length > 0 && (
+            <Card title="Reasignaciones" size="small" style={{ marginTop: 16 }}>
+              {ticket.reassignments.map(r => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span>{r.previous_assignee_name ?? 'Sin resolutor previo'}</span>
+                  <span style={{ color: palette.slate400 }}>➡️</span>
+                  <span>{r.new_assignee_name}</span>
+                  <span style={{ color: palette.slate400, marginLeft: 4 }}>{new Date(r.created_at).toLocaleString('es-CO')}</span>
+                  {r.reason && <span style={{ color: palette.slate400 }}>· {r.reason}</span>}
+                </div>
+              ))}
+            </Card>
+          )}
+        </Col>
+
+        {/* ── Sidebar: SLA / Focus Room / Comentarios y acciones (fijo, OBS-0042) / Subtareas ── */}
+        <Col xs={24} lg={10}>
+          <Card
+            size="small"
+            title={<span><ClockCircleOutlined style={{ color: vivid.red.text, marginRight: 8 }} />SLA</span>}
+            style={{ borderColor: palette.slate200, background: palette.slate50 }}
+          >
+            <SlaCounter sla={ticket.sla} hasAssignee={ticket.assignee != null} />
+          </Card>
+
+          <Card
+            size="small"
+            title={<span><FieldTimeOutlined style={{ color: vivid.purple.text, marginRight: 8 }} />Sesión de trabajo (Focus Room)</span>}
+            style={{ marginTop: 16, borderColor: palette.slate200, background: palette.slate50 }}
+          >
+            <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
+              <div style={{ fontSize: 26, fontWeight: 700, color: palette.slate400, fontFamily: 'ui-monospace, monospace' }}>
+                00:00:00
+              </div>
+              <div style={{ fontSize: 11, color: palette.slate400, marginBottom: 10 }}>
+                Tiempo efectivo dedicado a este ticket
+              </div>
+              <Tooltip title="Modo de trabajo enfocado en un solo ticket, con asistente IA — llega en Fase 7">
+                <Button size="small" icon={<PlayCircleOutlined />} disabled style={{ width: '100%' }}>
+                  Iniciar sesión · Fase 7
+                </Button>
+              </Tooltip>
+            </div>
+          </Card>
+
+          <Card
+            title={isTask ? 'Estado y comentarios' : 'Comentarios y acciones'}
+            size="small"
+            style={{ marginTop: 16, position: 'sticky', top: 16 }}
+          >
+            {isTask && (
+              <>
+                <TaskStatusChanger ticket={ticket} onUpdated={load} />
+                <Divider style={{ margin: '12px 0' }} />
+              </>
+            )}
+            {/* OBS-0042 (spec 030): historial con scroll interno propio, acotado a un alto máximo,
+             * para que la caja de nuevo comentario y las acciones de abajo queden siempre visibles. */}
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              <CommentThread ticketId={ticket.id} comments={ticket.comments} />
+            </div>
+            <Divider style={{ margin: '12px 0' }} />
+            <CommentComposer ticket={ticket} resolutionTypes={resolutionTypes} onUpdated={load}
+              restrictToInternal={isTask} />
           </Card>
 
           {isTask && !isSubtask && (
