@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Propuesta — Accesos y Conexiones del Cliente</title>
+<style>
+  :root {
+    --paper: #f5f3ee;
+    --surface: #ffffff;
+    --surface-2: #ede9e0;
+    --ink: #211f1c;
+    --ink-soft: #5a564d;
+    --ink-faint: #8a8578;
+    --line: rgba(33, 31, 28, 0.13);
+    --line-strong: rgba(33, 31, 28, 0.28);
+    --accent: #1f5c56;
+    --accent-ink: #164641;
+    --accent-soft: #dfe9e5;
+    --accent-soft-line: rgba(31, 92, 86, 0.28);
+    --bad: #9a3d34;
+    --bad-soft: #f3e1de;
+
+    --type-vpn: #2d5fa0;
+    --type-vpn-soft: rgba(45, 95, 160, 0.12);
+    --type-db: #7a4fa3;
+    --type-db-soft: rgba(122, 79, 163, 0.12);
+    --type-srv: #a06a1f;
+    --type-srv-soft: rgba(160, 106, 31, 0.14);
+    --type-rdp: #3f8f5a;
+    --type-rdp-soft: rgba(63, 143, 90, 0.12);
+    --type-sys: #a34a63;
+    --type-sys-soft: rgba(163, 74, 99, 0.12);
+    --type-6: #1f7a6c;
+    --type-6-soft: rgba(31, 122, 108, 0.12);
+    --type-7: #55608c;
+    --type-7-soft: rgba(85, 96, 140, 0.12);
+
+    --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14171a;
+      --surface: #1b1f22;
+      --surface-2: #21262a;
+      --ink: #eae7df;
+      --ink-soft: #a9a599;
+      --ink-faint: #726d61;
+      --line: rgba(234, 231, 223, 0.13);
+      --line-strong: rgba(234, 231, 223, 0.26);
+      --accent: #52a89d;
+      --accent-ink: #8ecdc3;
+      --accent-soft: rgba(82, 168, 157, 0.14);
+      --accent-soft-line: rgba(82, 168, 157, 0.32);
+      --bad: #d67e73;
+      --bad-soft: rgba(154, 61, 52, 0.18);
+
+      --type-vpn: #6f9bd6;
+      --type-vpn-soft: rgba(111, 155, 214, 0.16);
+      --type-db: #b191d6;
+      --type-db-soft: rgba(177, 145, 214, 0.16);
+      --type-srv: #d6a24f;
+      --type-srv-soft: rgba(214, 162, 79, 0.16);
+      --type-rdp: #7fc496;
+      --type-rdp-soft: rgba(127, 196, 150, 0.16);
+      --type-sys: #d98da3;
+      --type-sys-soft: rgba(217, 141, 163, 0.16);
+      --type-6: #5fb8a8;
+      --type-6-soft: rgba(95, 184, 168, 0.16);
+      --type-7: #9ba3d6;
+      --type-7-soft: rgba(155, 163, 214, 0.16);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.65;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+
+  .prose { max-width: 66ch; }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  .eyebrow {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+
+  /* ---- Masthead ---- */
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding-bottom: 2.5rem;
+    border-bottom: 1px solid var(--line-strong);
+    margin-bottom: 3rem;
+  }
+
+  .masthead h1 {
+    font-size: 2.35rem;
+    line-height: 1.15;
+    margin: 0;
+  }
+
+  .masthead .subtitle {
+    font-size: 1.05rem;
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.6rem;
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+
+  .meta-row strong { color: var(--ink-soft); font-weight: 600; }
+
+  /* ---- Summary callout ---- */
+  .summary {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-soft-line);
+    border-radius: 6px;
+    padding: 1.5rem 1.7rem;
+    margin-bottom: 3.5rem;
+  }
+
+  .summary h2 {
+    font-size: 1rem;
+    font-family: var(--font-body);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-ink);
+    margin: 0 0 0.9rem;
+  }
+
+  .summary ul {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .summary li { max-width: 62ch; }
+
+  /* ---- Sections ---- */
+  section {
+    margin-bottom: 3.75rem;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.9rem;
+    border-top: 1px solid var(--line);
+    padding-top: 0.9rem;
+    margin-bottom: 1.6rem;
+  }
+
+  .section-head h2 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  p { margin: 0 0 1rem; }
+  p:last-child { margin-bottom: 0; }
+
+  code, .mono { font-family: var(--font-mono); font-size: 0.87em; }
+
+  code {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+  }
+
+  /* ---- Tables ---- */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+    min-width: 640px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 0.65rem 0.85rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+
+  td.num, th.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+
+  .field-table td:first-child { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-ink); white-space: nowrap; }
+
+  /* ---- Type badges ---- */
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .badge.vpn { color: var(--type-vpn); background: var(--type-vpn-soft); border-color: currentColor; }
+  .badge.db  { color: var(--type-db);  background: var(--type-db-soft);  border-color: currentColor; }
+  .badge.srv { color: var(--type-srv); background: var(--type-srv-soft); border-color: currentColor; }
+  .badge.rdp { color: var(--type-rdp); background: var(--type-rdp-soft); border-color: currentColor; }
+  .badge.sys { color: var(--type-sys); background: var(--type-sys-soft); border-color: currentColor; }
+  .badge.t6 { color: var(--type-6); background: var(--type-6-soft); border-color: currentColor; }
+  .badge.t7 { color: var(--type-7); background: var(--type-7-soft); border-color: currentColor; }
+
+  /* ---- Catálogo administrable: swatch + lista ---- */
+  .swatch {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .catalog-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .catalog-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.88rem;
+  }
+  .catalog-list li:last-child { border-bottom: none; }
+  .catalog-list li.is-new { background: var(--accent-soft); }
+  .catalog-list .cname { flex: 1 1 auto; }
+  .catalog-list .cmeta { color: var(--ink-faint); font-size: 0.78rem; }
+
+  .badge.forced {
+    color: var(--bad);
+    background: var(--bad-soft);
+    border-color: currentColor;
+  }
+
+  /* ---- Legend ---- */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.4rem;
+    margin: 0.9rem 0 1.1rem;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+
+  /* ---- Password reveal ---- */
+  .pw-cell { display: flex; align-items: center; gap: 0.5rem; }
+  .pw-value { font-family: var(--font-mono); letter-spacing: 0.02em; }
+
+  .reveal-btn {
+    border: 1px solid var(--line-strong);
+    background: var(--surface-2);
+    color: var(--ink-soft);
+    border-radius: 5px;
+    width: 1.7rem;
+    height: 1.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .reveal-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+  .reveal-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .reveal-btn svg { width: 15px; height: 15px; }
+
+  .attach {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--accent-ink);
+    font-size: 0.85rem;
+  }
+  .attach svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .attach.none { color: var(--ink-faint); font-style: italic; }
+
+  .note {
+    color: var(--bad);
+    font-size: 0.85rem;
+  }
+  .note::before { content: "⚠ "; }
+
+  /* ---- Comparison labels ---- */
+  .panel-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.7rem;
+  }
+  .panel-label .tag {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.55rem;
+    border-radius: 4px;
+  }
+  .panel-label.before .tag { color: var(--bad); background: var(--bad-soft); }
+  .panel-label.after .tag { color: var(--accent-ink); background: var(--accent-soft); }
+  .panel-label .desc { color: var(--ink-faint); font-size: 0.85rem; }
+
+  .comparison-gap { margin: 2.2rem 0; }
+
+  /* ---- Instancia (acceso) con credenciales anidadas ---- */
+  .access-group {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    margin-bottom: 1.3rem;
+    overflow-x: auto;
+  }
+  .access-group:last-child { margin-bottom: 0; }
+
+  .access-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 0.35rem;
+    column-gap: 1.5rem;
+    padding: 0.85rem 1.1rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    font-size: 0.86rem;
+  }
+  .access-head .kv { display: flex; align-items: baseline; gap: 0.4rem; }
+  .access-head .kv .k {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+  }
+  .access-head .kv .v { font-family: var(--font-mono); color: var(--ink); }
+  .access-head .spacer { flex: 1 1 auto; }
+
+  .access-notes {
+    padding: 0.7rem 1.1rem;
+    font-size: 0.83rem;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .access-notes .k {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    margin-right: 0.4rem;
+  }
+
+  .cred-table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+  .cred-table th, .cred-table td {
+    padding: 0.55rem 1.1rem;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+  .cred-table thead th {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  .cred-table tbody tr:last-child td { border-bottom: none; }
+  .cred-table tbody tr:hover td { background: var(--surface-2); }
+  .cred-table .cred-note { font-size: 0.78rem; color: var(--ink-faint); font-style: italic; }
+
+  /* ---- Mockup card (client modal) ---- */
+  .mock-card {
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .mock-tabs {
+    display: flex;
+    gap: 1.6rem;
+    padding: 0 1.4rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .mock-tabs span {
+    padding: 0.85rem 0;
+    font-size: 0.9rem;
+    color: var(--ink-faint);
+    border-bottom: 2px solid transparent;
+  }
+  .mock-tabs span.active {
+    color: var(--ink);
+    font-weight: 600;
+    border-bottom-color: var(--accent);
+  }
+  .mock-body { padding: 1.3rem 1.4rem 1.5rem; }
+  .mock-client { font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 1rem; }
+  .mock-client strong { color: var(--ink-soft); }
+
+  /* ---- Field-change table cells ---- */
+  .why { color: var(--ink-soft); }
+
+  /* ---- Security list ---- */
+  .sec-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .sec-list li {
+    display: flex;
+    gap: 0.9rem;
+    max-width: 64ch;
+  }
+  .sec-list .dot {
+    flex-shrink: 0;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 0.55rem;
+  }
+
+  /* ---- Next steps ---- */
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+  .steps li {
+    counter-increment: step;
+    display: flex;
+    gap: 1rem;
+    max-width: 64ch;
+  }
+  .steps li::before {
+    content: counter(step);
+    flex-shrink: 0;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  footer {
+    margin-top: 4.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+
+  footer p { max-width: 60ch; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <span class="eyebrow">Borrador personal · previo a Backlog UAT</span>
+    <h1>Accesos y conexiones del cliente — propuesta de ampliación</h1>
+    <p class="subtitle">Explorando qué le falta a la pestaña "Accesos y conexiones" para reemplazar de verdad a los Cuadernos de Teamwork, antes de convertirlo en una observación formal.</p>
+    <div class="meta-row">
+      <span><strong>Origen:</strong> OBS-0001 · Spec 018-cliente-accesos-conexiones</span>
+      <span><strong>Estado:</strong> Sin socializar</span>
+      <span><strong>Fecha:</strong> 27 de julio de 2026</span>
+    </div>
+  </header>
+
+  <div class="summary">
+    <h2>En resumen</h2>
+    <ul>
+      <li>El modelo actual (<code>vpn</code>, <code>system_url</code>, <code>remote_desktop</code>) no tiene forma de representar un acceso a <strong>base de datos</strong> ni a un <strong>servidor/instancia/VM</strong> sin forzar el tipo.</li>
+      <li>No existe un campo <code>puerto</code> propio — hoy se concatena a mano dentro del host.</li>
+      <li><code>environment</code> (Producción/Pruebas) solo aplica cuando el tipo es <code>system_url</code>, pero en la práctica también aplica a VPN y bases de datos.</li>
+      <li>El manual de conexión solo puede adjuntarse a nivel de cliente en general — no se puede anclar a un acceso puntual cuando hay varios.</li>
+      <li><strong>Corrección tras revisar un caso real:</strong> un acceso (ej. un ERP Cloud, un OIC) suele tener <strong>una sola URL compartida por varios usuarios</strong>, cada uno con su propia credencial. Modelarlo como "1 acceso = 1 usuario" obliga a repetir la URL por cada persona.</li>
+      <li>El "tipo de acceso" (VPN, Base de datos…) no debe ser un enum fijo en código — debe ser un <strong>catálogo administrable</strong> (mismo patrón que "Equipo"), para poder agregar APEX, NetSuite, etc. sin depender de un despliegue.</li>
+    </ul>
+  </div>
+
+  <div class="summary" style="background:var(--surface-2); border-color:var(--line-strong);">
+    <h2 style="color:var(--ink-soft);">Nota para quien lo implemente (persona o IA)</h2>
+    <p style="margin:0; max-width:62ch;">Este documento es una <strong>sugerencia exploratoria</strong> para discutir, no una especificación aprobada ni una instrucción para ejecutar tal cual. Úsalo como contexto de la idea y del problema real que la origina; el alcance final, los nombres de campos y el diseño de UI se deben validar contra el spec vivo (<code>specs/018-cliente-accesos-conexiones/</code>) y registrar como observación en <code>UAT/02_Backlog/BACKLOG.md</code> antes de construirse.</p>
+  </div>
+
+  <section id="contexto">
+    <div class="section-head"><h2>Contexto</h2></div>
+    <div class="prose">
+      <p>Hoy uso los Cuadernos de Teamwork para guardar los accesos técnicos de cada cliente: instancias, máquinas virtuales, VPNs, bases de datos, credenciales y, muchas veces, el manual o instructivo de cómo conectarse. Por costo y por funcionalidades que necesito, estoy migrando la gestión de proyectos a mi propia aplicación.</p>
+      <p>La pestaña "Accesos y conexiones" de TICKET_SYW ya resolvió el problema original (<code>OBS-0001</code>): antes solo existían dos columnas sueltas en el cliente, <code>vpn_ips</code> y <code>vpn_credentials</code>. Ahora es una tabla de registros múltiples. Pero al usarla para reemplazar de verdad los Cuadernos, aparecen límites que el spec original no cubría.</p>
+    </div>
+  </section>
+
+  <section id="brecha">
+    <div class="section-head"><h2>La brecha, con un caso real</h2></div>
+    <p class="prose">Mismo cliente ficticio, los mismos cuatro accesos, representados con el modelo de hoy y con el propuesto.</p>
+
+    <div class="panel-label before">
+      <span class="tag">Hoy</span>
+      <span class="desc">Constructora Aurora S.A.S. — forzando los cuatro accesos en el enum actual</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tipo</th><th>Host</th><th>Usuario</th><th>Contraseña</th><th>Limitación</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge forced">URL de sistema</span></td>
+            <td class="mono">db-prod.aurora.internal:5432</td>
+            <td class="mono">app_readonly</td>
+            <td class="mono">••••••••</td>
+            <td class="note">No existe tipo "Base de datos"; el puerto se escribe a mano dentro del host</td>
+          </tr>
+          <tr>
+            <td><span class="badge forced">VPN</span></td>
+            <td class="mono">vpn.aurora.com</td>
+            <td class="mono">vpn_prod</td>
+            <td class="mono">••••••••</td>
+            <td class="note">No se puede indicar ambiente (Producción/Staging) en un acceso VPN</td>
+          </tr>
+          <tr>
+            <td><span class="badge forced">VPN</span></td>
+            <td class="mono">10.20.4.15</td>
+            <td class="mono">deploy</td>
+            <td class="mono">••••••••</td>
+            <td class="note">Es un servidor por SSH, no una VPN — se etiqueta así por no tener dónde más ponerlo</td>
+          </tr>
+          <tr>
+            <td><span class="badge forced">Escritorio remoto</span></td>
+            <td class="mono">rdp.aurora.com</td>
+            <td class="mono">soporte.sywork</td>
+            <td class="mono">••••••••</td>
+            <td class="note">El manual de conexión, si existe, queda mezclado en los adjuntos generales del cliente</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose" style="font-size:0.85rem; color:var(--ink-faint); margin-top:0.8rem;">Y si ese ERP tiene 5 usuarios distintos sobre la misma URL, hoy tocaría repetir esa fila 5 veces — una por usuario, con el host duplicado en cada una.</p>
+
+    <div class="comparison-gap"></div>
+
+    <div class="panel-label after">
+      <span class="tag">Propuesta</span>
+      <span class="desc">Cada fila gris es una instancia (URL única); debajo, sus credenciales — una o varias</span>
+    </div>
+    <div class="legend">
+      <span><span class="badge vpn">VPN</span></span>
+      <span><span class="badge db">Base de datos</span></span>
+      <span><span class="badge srv">Servidor / instancia</span></span>
+      <span><span class="badge rdp">Escritorio remoto</span></span>
+      <span><span class="badge sys">Sistema / Integración</span></span>
+    </div>
+
+    <div class="access-group">
+      <div class="access-head">
+        <span class="badge vpn">VPN</span>
+        <span class="kv"><span class="k">Ambiente</span><span class="v">Producción</span></span>
+        <span class="kv"><span class="k">Host</span><span class="v">vpn.aurora.com</span></span>
+        <span class="kv"><span class="k">Puerto</span><span class="v">1194</span></span>
+        <span class="spacer"></span>
+        <span class="attach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3 3 0 014.24 4.24l-9.2 9.19a1 1 0 01-1.41-1.41l8.49-8.48"/></svg>Manual-VPN-Prod.pdf</span>
+      </div>
+      <table class="cred-table">
+        <thead><tr><th>Credencial</th><th>Usuario</th><th>Contraseña</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Equipo de soporte</td>
+            <td class="mono">vpn_prod</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="Xk9#mPz2Q!">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">Requiere cliente OpenVPN 2.6+</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="access-group">
+      <div class="access-head">
+        <span class="badge db">Base de datos</span>
+        <span class="kv"><span class="k">Ambiente</span><span class="v">Producción</span></span>
+        <span class="kv"><span class="k">Host</span><span class="v">db-prod.aurora.internal</span></span>
+        <span class="kv"><span class="k">Puerto</span><span class="v">5432</span></span>
+        <span class="spacer"></span>
+        <span class="attach none">Sin manual</span>
+      </div>
+      <table class="cred-table">
+        <thead><tr><th>Credencial</th><th>Usuario</th><th>Contraseña</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Solo lectura (soporte)</td>
+            <td class="mono">app_readonly</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="qT7!vLr40@d">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">PostgreSQL 15</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="access-group">
+      <div class="access-head">
+        <span class="badge srv">Servidor / instancia</span>
+        <span class="kv"><span class="k">Ambiente</span><span class="v">Staging</span></span>
+        <span class="kv"><span class="k">Host</span><span class="v">10.20.4.15</span></span>
+        <span class="kv"><span class="k">Puerto</span><span class="v">22</span></span>
+        <span class="spacer"></span>
+        <span class="attach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3 3 0 014.24 4.24l-9.2 9.19a1 1 0 01-1.41-1.41l8.49-8.48"/></svg>Manual-SSH-Staging.pdf</span>
+      </div>
+      <table class="cred-table">
+        <thead><tr><th>Credencial</th><th>Usuario</th><th>Contraseña</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Despliegue</td>
+            <td class="mono">deploy</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="(acceso por llave SSH)">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar detalle" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">Acceso por llave, no por contraseña</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="access-group">
+      <div class="access-head">
+        <span class="badge sys">Sistema / Integración</span>
+        <span class="kv"><span class="k">Ambiente</span><span class="v">Pruebas</span></span>
+        <span class="kv"><span class="k">Host</span><span class="v">erp-test.aurora.oraclecloud.com</span></span>
+        <span class="spacer"></span>
+        <span class="attach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3 3 0 014.24 4.24l-9.2 9.19a1 1 0 01-1.41-1.41l8.49-8.48"/></svg>Manual-ERP-Pruebas.pdf</span>
+      </div>
+      <div class="access-notes"><span class="k">Notas del acceso</span>Ambiente compartido por todo el equipo implementador — un mismo host, varias credenciales.</div>
+      <table class="cred-table">
+        <thead><tr><th>Credencial</th><th>Usuario</th><th>Contraseña</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Fabio Gómez · Finanzas</td>
+            <td class="mono">AURORA_IMPL_FIN</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="oracle-demo-1">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">—</td>
+          </tr>
+          <tr>
+            <td>Catalina Ruiz · Proyectos</td>
+            <td class="mono">AURORA_IMPL_PROY</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="oracle-demo-1">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">Misma contraseña que Fabio y Julián</td>
+          </tr>
+          <tr>
+            <td>Julián Mora · Cadena de suministro</td>
+            <td class="mono">AURORA_IMPL_SCM1</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="oracle-demo-1">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">—</td>
+          </tr>
+          <tr>
+            <td>Cuenta de integración</td>
+            <td class="mono">integracion@aurora.co</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="oracle-demo-2">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">No cambiar esta contraseña</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="access-group">
+      <div class="access-head">
+        <span class="badge sys">Sistema / Integración</span>
+        <span class="kv"><span class="k">Ambiente</span><span class="v">Pruebas</span></span>
+        <span class="kv"><span class="k">Host</span><span class="v">oic-test.aurora-integration.oraclecloud.com</span></span>
+        <span class="spacer"></span>
+        <span class="attach none">Sin manual</span>
+      </div>
+      <div class="access-notes"><span class="k">Notas del acceso</span>Scope: <span class="mono">https://…integration.ocp.oraclecloud.com:443urn:opc:resource:consumer::all</span> · Token URL: <span class="mono">https://idcs-….identity.oraclecloud.com/oauth2/v1/token</span></div>
+      <table class="cred-table">
+        <thead><tr><th>Credencial</th><th>Usuario / Client ID</th><th>Contraseña / Secret</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Client OAuth</td>
+            <td class="mono">b7f2b6…d0c4 <span class="cred-note">(ejemplo)</span></td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="secret-demo-oauth">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar secreto" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">Campos Usuario/Contraseña reutilizados como Client ID/Secret — mismo cifrado</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose" style="margin-top:0.9rem; font-size:0.85rem; color:var(--ink-faint);">Todos los hosts, usuarios y contraseñas de esta sección son ficticios — solo ilustran la estructura instancia → credenciales, no datos reales de ningún cliente.</p>
+  </section>
+
+  <section id="propuesta">
+    <div class="section-head"><h2>Cambios de modelo propuestos</h2></div>
+    <div class="table-wrap">
+      <table class="field-table">
+        <thead>
+          <tr><th>Campo</th><th>Hoy</th><th>Propuesta</th><th>Por qué</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>client_access<br><span class="why">(usuario, password)</span></td>
+            <td>Usuario y contraseña viven en la misma fila que el host — 1 acceso = 1 credencial</td>
+            <td>Se separan en una tabla hija nueva: <code>client_access_credentials</code></td>
+            <td class="why">Un mismo host (ERP, OIC, APEX) puede tener N usuarios; hoy obliga a repetir la URL por cada uno</td>
+          </tr>
+          <tr>
+            <td>client_access_credentials<br><span class="why">(nueva tabla)</span></td>
+            <td>No existe</td>
+            <td>id, client_access_id (FK), etiqueta, username, password (cifrado), notes</td>
+            <td class="why">1 acceso ──&lt; N credenciales. Una contraseña compartida entre varios usuarios simplemente se repite como valor — no requiere modelado especial</td>
+          </tr>
+          <tr>
+            <td>access_type</td>
+            <td>Enum fijo de aplicación: vpn · system_url · remote_desktop (solo se amplía con un despliegue de código)</td>
+            <td>FK a catálogo administrable <code>catalog_access_types</code> — el usuario agrega tipos nuevos (APEX, NetSuite…) desde el módulo Catálogos, sin tocar código</td>
+            <td class="why">Mismo patrón ya usado en <code>catalog_teams</code> (OBS-0024): un catálogo, no un enum, cuando el usuario necesita ampliarlo él mismo</td>
+          </tr>
+          <tr>
+            <td>environment</td>
+            <td>Solo si access_type = system_url</td>
+            <td>Aplica a cualquier tipo</td>
+            <td class="why">VPN y base de datos también distinguen Producción/Pruebas en la práctica</td>
+          </tr>
+          <tr>
+            <td>port</td>
+            <td>No existe</td>
+            <td>Campo propio, numérico, a nivel del acceso (no de la credencial)</td>
+            <td class="why">Host y puerto son datos distintos; hoy se concatenan a mano</td>
+          </tr>
+          <tr>
+            <td>client_access.notes</td>
+            <td>Notas generales del acceso</td>
+            <td>Alberga metadatos del endpoint (ej. Scope/Token URL de una integración OAuth)</td>
+            <td class="why">Ese dato describe la conexión, no a una credencial en particular — no necesita columnas nuevas</td>
+          </tr>
+          <tr>
+            <td>client_access_attachments<br>.client_access_id</td>
+            <td>No existe (adjunto siempre a nivel cliente)</td>
+            <td>Nueva FK opcional (nullable)</td>
+            <td class="why">Ancla el manual a UN acceso puntual, sin perder los adjuntos generales del cliente</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="catalogo">
+    <div class="section-head"><h2>Los tipos de acceso, como catálogo — no como enum fijo</h2></div>
+    <p class="prose">Igual que ya pasó con "Equipo" (<code>OBS-0024</code>, catálogo <code>catalog_teams</code> administrable desde Catálogos), "Tipo de acceso" deja de ser una lista fija en el código. Se administra desde la misma pantalla de Catálogos: agregas "APEX", "NetSuite", lo que necesites, y aparece disponible de inmediato al crear un acceso.</p>
+    <p class="prose">El color <strong>no lo elige el usuario a mano</strong> — evita combinaciones ilegibles o dos tipos casi del mismo color. Cada tipo nuevo toma automáticamente el siguiente color disponible de una paleta fija de 8, pensada para verse bien en modo claro y oscuro; una vez asignado, ese color no cambia aunque se agreguen más tipos después.</p>
+
+    <ul class="catalog-list">
+      <li><span class="swatch" style="background:var(--type-vpn)"></span><span class="cname">VPN</span><span class="cmeta">4 accesos</span></li>
+      <li><span class="swatch" style="background:var(--type-db)"></span><span class="cname">Base de datos</span><span class="cmeta">2 accesos</span></li>
+      <li><span class="swatch" style="background:var(--type-srv)"></span><span class="cname">Servidor / instancia</span><span class="cmeta">1 acceso</span></li>
+      <li><span class="swatch" style="background:var(--type-rdp)"></span><span class="cname">Escritorio remoto</span><span class="cmeta">1 acceso</span></li>
+      <li><span class="swatch" style="background:var(--type-sys)"></span><span class="cname">Sistema / Integración</span><span class="cmeta">2 accesos</span></li>
+      <li class="is-new"><span class="swatch" style="background:var(--type-6)"></span><span class="cname">APEX <span class="cmeta">— agregado hoy</span></span><span class="cmeta">1 acceso</span></li>
+      <li class="is-new"><span class="swatch" style="background:var(--type-7)"></span><span class="cname">NetSuite <span class="cmeta">— agregado hoy</span></span><span class="cmeta">0 accesos</span></li>
+    </ul>
+    <p class="prose" style="margin-top:0.9rem;">Al agregarlos, "APEX" y "NetSuite" quedan disponibles para clasificar accesos de inmediato — con su propio color, agrupando igual que los demás:</p>
+
+    <div class="access-group" style="margin-top:1rem;">
+      <div class="access-head">
+        <span class="badge t6">APEX</span>
+        <span class="kv"><span class="k">Ambiente</span><span class="v">Producción</span></span>
+        <span class="kv"><span class="k">Host</span><span class="v">150.136.70.23</span></span>
+        <span class="kv"><span class="k">Puerto</span><span class="v">1443</span></span>
+        <span class="spacer"></span>
+        <span class="attach none">Sin manual</span>
+      </div>
+      <div class="access-notes"><span class="k">Notas del acceso</span>Workspace <span class="mono">LACLS</span> — hay varios usuarios administrativos sobre el mismo workspace.</div>
+      <table class="cred-table">
+        <thead><tr><th>Credencial</th><th>Usuario</th><th>Contraseña</th><th>Notas</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Admin del workspace</td>
+            <td class="mono">ADMIN</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="apex-demo-1">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">Se rota cada año para que no expire</td>
+          </tr>
+          <tr>
+            <td>Acceso ORDS</td>
+            <td class="mono">ORDS_ACCESS</td>
+            <td><div class="pw-cell"><span class="pw-value" data-pw="apex-demo-2">••••••••</span><button class="reveal-btn" type="button" aria-label="Mostrar contraseña" onclick="togglePw(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+            <td class="cred-note">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="margin-top:0.9rem; font-size:0.85rem; color:var(--ink-faint);">De nuevo: host, workspace y contraseñas ficticios, solo para mostrar que un tipo creado por el usuario agrupa y colorea igual que los tipos de fábrica.</p>
+  </section>
+
+  <section id="mockup">
+    <div class="section-head"><h2>Cómo se vería en el modal del cliente</h2></div>
+    <p class="prose">Misma composición ya aprobada en la Decisión 6 del spec 018 (pestañas dentro del modal existente): se conserva la pestaña. Lo que cambia es que la tabla plana de accesos pasa a ser una lista de instancias, cada una expandible a sus credenciales — igual al patrón "Portafolio de software" pero con un nivel más de anidación.</p>
+    <div class="mock-card">
+      <div class="mock-tabs">
+        <span>Datos generales</span>
+        <span class="active">Accesos y conexiones</span>
+        <span>Portafolio de software</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-client"><strong>Cliente:</strong> Constructora Aurora S.A.S. · 4 accesos registrados</div>
+        <p style="font-size:0.85rem; color:var(--ink-faint); margin:0;">↑ Ver la tabla "Propuesta" de la sección anterior — es el contenido que ocuparía esta pestaña.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="seguridad">
+    <div class="section-head"><h2>Qué no cambia (seguridad)</h2></div>
+    <ul class="sec-list">
+      <li><span class="dot"></span><span>La contraseña se sigue cifrando con el mismo mecanismo ya vigente para <code>vpn_credentials</code>, ahora en <code>client_access_credentials.password</code>. Un Client Secret de OAuth se guarda en esa misma columna — es un secreto igual que una contraseña, no necesita un cifrado distinto.</span></li>
+      <li><span class="dot"></span><span>RLS ya está habilitado en <code>client_access</code> y <code>client_access_attachments</code> con el mismo patrón de <code>client_contacts</code>; la tabla nueva <code>client_access_credentials</code> y las columnas nuevas quedan cubiertas por la misma policy, sin crear una variante.</span></li>
+      <li><span class="dot"></span><span>El enmascarado por defecto se mantiene: toda contraseña sigue oculta tras <code>••••••••</code> hasta que alguien la revela explícitamente con el botón, igual que hoy.</span></li>
+    </ul>
+  </section>
+
+  <section id="siguientes">
+    <div class="section-head"><h2>Próximos pasos si decido avanzar</h2></div>
+    <ol class="steps">
+      <li>Revisar esta propuesta con calma antes de tocar el backlog — este documento no compromete nada todavía.</li>
+      <li>Si se aprueba, registrar una observación nueva en <code>UAT/02_Backlog/BACKLOG.md</code> (no reabrir <code>OBS-0001</code>, que ya quedó verificado en su alcance original).</li>
+      <li>Actualizar <code>specs/018-cliente-accesos-conexiones/data-model.md</code> o abrir un spec incremental: catálogo <code>catalog_access_types</code>, tabla <code>client_access_credentials</code>, columna <code>port</code>, FK nullable en adjuntos.</li>
+      <li>Nueva migración Alembic — crea <code>catalog_access_types</code> (semilla: VPN, Base de datos, Servidor/instancia, Escritorio remoto, Sistema/Integración) y <code>client_access_credentials</code> (con su propio RLS), migra usuario/contraseña actuales de <code>client_access</code> como su primera credencial — reversible, sin tocar las columnas legacy <code>vpn_ips</code>/<code>vpn_credentials</code>.</li>
+    </ol>
+  </section>
+
+  <footer>
+    <p>Documento de trabajo personal, generado como exploración previa a proponerlo formalmente. No ha sido socializado con el equipo ni representa un compromiso de desarrollo.</p>
+  </footer>
+
+</div>
+
+<script>
+  function togglePw(btn) {
+    var cell = btn.previousElementSibling;
+    var real = cell.getAttribute('data-pw');
+    var masked = '••••••••';
+    if (cell.textContent === masked) {
+      cell.textContent = real;
+    } else {
+      cell.textContent = masked;
+    }
+  }
+</script>
+
+</body>
+</html>
