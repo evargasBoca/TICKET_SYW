@@ -32,6 +32,32 @@ def test_create_sla_rule(client, sla_project):
     assert body["active"] is True
 
 
+# ── OBS-0043 (spec 030) — identificar el cliente del proyecto para distinguir homónimos ────
+
+def test_create_sla_rule_includes_client(client, sla_project, ticket_client):
+    """El payload debe exponer client_id/client_name del proyecto de la regla, no solo project_name."""
+    response = client.post("/api/sla-rules", json={
+        "project_id": sla_project["id"], "priority": "high",
+        "contact_minutes": 15, "execution_minutes": 480,
+    })
+    assert response.status_code == 201, response.get_json()
+    body = response.get_json()
+    assert body["client_id"] == ticket_client["id"]
+    assert body["client_name"] == ticket_client["name"]
+
+
+def test_list_sla_rules_includes_client(client, sla_project, ticket_client):
+    client.post("/api/sla-rules", json={
+        "project_id": sla_project["id"], "priority": "critical",
+        "contact_minutes": 15, "execution_minutes": 60,
+    })
+    response = client.get(f"/api/sla-rules?project_id={sla_project['id']}")
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert all(item["client_id"] == ticket_client["id"] for item in body["items"])
+    assert all(item["client_name"] == ticket_client["name"] for item in body["items"])
+
+
 def test_list_sla_rules_filters_by_project(client, sla_project):
     client.post("/api/sla-rules", json={
         "project_id": sla_project["id"], "priority": "critical",
