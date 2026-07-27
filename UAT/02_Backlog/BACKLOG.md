@@ -4,7 +4,7 @@
 
 | ID | Módulo/Pantalla | Tipo | Estado | Reportado por | Iteración origen | Iteración cierre | Descripción corta |
 |---|---|---|---|---|---|---|---|
-| OBS-0001 | Clientes > Nuevo Cliente | Mejora | Lista para Validar | Camilo Reyes | ITER-001 | — | Ampliar "IPs VPN"/"Credenciales VPN" a múltiples accesos (VPN, URL por ambiente, escritorio remoto, adjuntos) |
+| OBS-0001 | Clientes > Nuevo Cliente | Mejora | Rechazada | Camilo Reyes | ITER-001 | ITER-006 | Ampliar "IPs VPN"/"Credenciales VPN" a múltiples accesos (VPN, URL por ambiente, escritorio remoto, adjuntos) — Rechazada (cerrada, absorbida por OBS-0041: el alcance se trata y se valida como parte de esa observación, no por separado) |
 | OBS-0002 | Pantalla Principal > Menú | Mejora | Verificada | Camilo Reyes | ITER-001 | — | Mover "Catálogos" dentro de "Maestros" en el menú principal |
 | OBS-0003 | Inicio de sesión | Mejora | Rechazada | Arely Pazmiño | ITER-002 | — | Mensaje de validación de credenciales no específico (usuario vs contraseña) — Rechazada (Desarrollador, decisión de negocio confirmada): diferenciar el mensaje habilita enumeración de usuarios válidos (anti-patrón de seguridad); se mantiene el mensaje genérico "Usuario o contraseña incorrectos", consistente con el patrón ya usado en `/api/auth/forgot-password` |
 | OBS-0004 | Tickets | Mejora | Lista para Validar | Arely Pazmiño | ITER-002 | — | Falta confirmación al eliminar un filtro |
