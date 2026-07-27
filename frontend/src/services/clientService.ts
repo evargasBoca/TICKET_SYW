@@ -2,7 +2,8 @@ import apiClient from './apiClient'
 import type { PaginatedResponse } from '../types/api'
 import type {
   ClientListItem, ClientDetail, ClientFormData, ClientSystem, ClientSystemFormData,
-  ClientAccess, ClientAccessFormData, ClientAccessAttachment,
+  ClientAccess, ClientAccessFormData, ClientAccessCredential, ClientAccessCredentialFormData,
+  ClientAccessAttachment,
 } from '../types/client'
 
 export const clientService = {
@@ -46,12 +47,26 @@ export const clientService = {
   deleteAccess: (clientId: string, accessId: string) =>
     apiClient.delete(`/api/clients/${clientId}/access/${accessId}`).then(r => r.data),
 
+  listCredentials: (clientId: string, accessId: string) =>
+    apiClient.get<{ items: ClientAccessCredential[] }>(`/api/clients/${clientId}/access/${accessId}/credentials`)
+      .then(r => r.data.items),
+
+  addCredential: (clientId: string, accessId: string, data: ClientAccessCredentialFormData) =>
+    apiClient.post<ClientAccessCredential>(`/api/clients/${clientId}/access/${accessId}/credentials`, data).then(r => r.data),
+
+  updateCredential: (clientId: string, accessId: string, credentialId: string, data: Partial<ClientAccessCredentialFormData>) =>
+    apiClient.patch<ClientAccessCredential>(`/api/clients/${clientId}/access/${accessId}/credentials/${credentialId}`, data).then(r => r.data),
+
+  deleteCredential: (clientId: string, accessId: string, credentialId: string) =>
+    apiClient.delete(`/api/clients/${clientId}/access/${accessId}/credentials/${credentialId}`).then(r => r.data),
+
   listAccessAttachments: (clientId: string) =>
     apiClient.get<{ items: ClientAccessAttachment[] }>(`/api/clients/${clientId}/access-attachments`).then(r => r.data.items),
 
-  uploadAccessAttachment: (clientId: string, file: File) => {
+  uploadAccessAttachment: (clientId: string, file: File, accessId?: string) => {
     const form = new FormData()
     form.append('file', file)
+    if (accessId) form.append('client_access_id', accessId)
     return apiClient.post<ClientAccessAttachment>(`/api/clients/${clientId}/access-attachments`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
