@@ -25,6 +25,11 @@ class AssignmentService:
             raise AssignmentError("not_found", "Recurso no encontrado", status_code=404)
         if not assignee.active:
             raise AssignmentError("resource_inactive", "No se puede asignar a un recurso inactivo")
+        # OBS-0047: un recurso puede seguir "activo" como recurso de RRHH mientras su cuenta de
+        # acceso (`User`) fue desactivada por separado — sin acceso al sistema, no puede atender
+        # tickets nuevos.
+        if assignee.user_id is not None and assignee.user_active is False:
+            raise AssignmentError("resource_inactive", "No se puede asignar a un recurso inactivo")
         trigger, comment_type = ASSIGN_MODES[mode]
         if not ticket_fsm.can_transition(ticket.status, trigger):
             # deja que apply() genere el 409 con las acciones válidas en español

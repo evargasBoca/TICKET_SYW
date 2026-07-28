@@ -47,3 +47,7 @@
 | OBS-0041 | Clientes > Accesos y conexiones | Mejora | Lista para Validar | Camilo Reyes | ITER-006 | — | Catálogo de tipos de acceso administrable, credenciales múltiples por acceso y adjunto por acceso (amplía OBS-0001) |
 | OBS-0042 | Tickets > Detalle del Ticket | Mejora | Lista para Validar | Juan Murcia | ITER-007 | — | Scroll excesivo por historial de comentarios extenso; reorganizar layout (Comentarios y acciones fijos a la derecha, historial con scroll interno) |
 | OBS-0043 | SLA Configurable | Mejora | Lista para Validar | Juan Murcia | ITER-007 | — | No se identifica el cliente en proyectos homónimos (filtro, creación y tabla de reglas de SLA) |
+| OBS-0044 | Registro de tiempos > Historial de registros | Defecto | Lista para Validar | Arely Pazmiño | ITER-008 | — | El historial de registros de tiempo muestra una hora diferente a la hora real del registro (desfase ~5h) |
+| OBS-0045 | Registro de tiempos > Historial de registros | Mejora | Lista para Validar | Arely Pazmiño | ITER-008 | — | La etiqueta "Fuera de jornada" se superpone al horario registrado y dificulta su lectura |
+| OBS-0046 | Panel de Asignación / Notificaciones | Mejora | Lista para Validar | Arely Pazmiño | ITER-008 | — | No se genera notificación al asignar/reasignar un ticket a un resolutor |
+| OBS-0047 | Panel de Asignación | Defecto | Lista para Validar | Arely Pazmiño | ITER-008 | — | El sistema permite asignar tickets a usuarios inactivos |

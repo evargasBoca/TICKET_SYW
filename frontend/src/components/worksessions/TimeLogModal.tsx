@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, EditOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { format, parseISO } from 'date-fns'
 import { workSessionService } from '../../services/workSessionService'
 import type { WorkSessionListItem } from '../../types/workSession'
 import { formatDuration } from '../../types/workSession'
@@ -37,8 +38,8 @@ function withinEditWindow(workDate: string): boolean {
 
 function formatTimeRange(item: WorkSessionListItem): string | null {
   if (!item.started_at || !item.ended_at) return null
-  const start = item.started_at.slice(11, 16)
-  const end = item.ended_at.slice(11, 16)
+  const start = format(parseISO(item.started_at), 'HH:mm')
+  const end = format(parseISO(item.ended_at), 'HH:mm')
   return `${start} – ${end}`
 }
 
@@ -85,9 +86,12 @@ export default function TimeLogModal({ open, onClose, ticketId, ticketNumber, ti
   const columns: ColumnsType<WorkSessionListItem> = [
     {
       title: 'Fecha', dataIndex: 'work_date', key: 'work_date',
-      render: (workDate: string, record) => (
-        <Space size={4}>
-          {workDate}
+    },
+    {
+      title: 'Horario', key: 'time_range',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <span>{formatTimeRange(record) ?? '—'}</span>
           {record.off_hours && (
             <Tooltip title="El registro cae total o parcialmente fuera del horario laboral configurado">
               <Tag color="warning" style={{ marginInlineEnd: 0 }}>Fuera de jornada</Tag>
@@ -95,10 +99,6 @@ export default function TimeLogModal({ open, onClose, ticketId, ticketNumber, ti
           )}
         </Space>
       ),
-    },
-    {
-      title: 'Horario', key: 'time_range',
-      render: (_, record) => formatTimeRange(record) ?? '—',
     },
     {
       title: 'Duración', dataIndex: 'duration_minutes', key: 'duration_minutes',

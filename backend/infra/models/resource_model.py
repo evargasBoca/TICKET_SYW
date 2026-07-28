@@ -62,11 +62,15 @@ class ResourceModel(Base):
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     skills = relationship("SkillModel", secondary=resource_skills_table, lazy="joined")
+    # OBS-0047: solo para leer el estado de la cuenta vinculada (`users.active`) al mapear a
+    # entidad — no se usa para escritura ni cascada.
+    user = relationship("UserModel", lazy="joined", viewonly=True)
 
     def to_entity(self) -> Resource:
         return Resource(
             id=self.id,
             user_id=self.user_id,
+            user_active=self.user.active if self.user_id and self.user else None,
             full_name=self.full_name,
             email=self.email,
             active=self.active,

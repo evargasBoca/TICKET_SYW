@@ -21,6 +21,10 @@ class ReassignmentService:
             raise ReassignmentError("not_found", "Recurso no encontrado", status_code=404)
         if not new_assignee.active:
             raise ReassignmentError("resource_inactive", "No se puede reasignar a un recurso inactivo")
+        # OBS-0047: mismo criterio que AssignmentService — un recurso "activo" con la cuenta de
+        # acceso desactivada tampoco es asignable.
+        if new_assignee.user_id is not None and new_assignee.user_active is False:
+            raise ReassignmentError("resource_inactive", "No se puede reasignar a un recurso inactivo")
         if ticket.status in TERMINAL_STATUSES:
             raise ReassignmentError(
                 "ticket_closed",

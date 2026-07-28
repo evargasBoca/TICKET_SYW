@@ -1104,9 +1104,13 @@ class TicketAssign(Resource):
             assignment_id = ticket_repo.add_assignment(
                 ticket.id, g.current_user.id, assignee_id, new_status, context, commit=False)
             if assignee.user_id:
+                client = ClientRepository(db).get_by_id(ticket.client_id)
                 NotificationRepository(db).add(
                     _notif_svc.build(assignee.user_id, "assigned", ticket.id,
-                                     ticket.ticket_number, ticket.title), commit=False)
+                                     ticket.ticket_number, ticket.title,
+                                     client_name=client.name if client else None,
+                                     priority=ticket.priority, status=new_status,
+                                     assigned_by=g.current_user.username), commit=False)
             db.commit()
 
             updated = ticket_repo.get_by_id(ticket.id)
@@ -1153,6 +1157,14 @@ class TicketReassign(Resource):
             ticket_repo.update_fields(ticket.id, assignee_id=new_assignee_id)
             reassignment_id = ticket_repo.add_reassignment(
                 ticket.id, g.current_user.id, previous_assignee_id, new_assignee_id, reason)
+            if new_assignee.user_id:
+                client = ClientRepository(db).get_by_id(ticket.client_id)
+                NotificationRepository(db).add(
+                    _notif_svc.build(new_assignee.user_id, "reassigned", ticket.id,
+                                     ticket.ticket_number, ticket.title,
+                                     client_name=client.name if client else None,
+                                     priority=ticket.priority, status=ticket.status,
+                                     assigned_by=g.current_user.username))
 
             updated = ticket_repo.get_by_id(ticket.id)
             reassignment = next(

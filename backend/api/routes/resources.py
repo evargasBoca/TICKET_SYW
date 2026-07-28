@@ -77,6 +77,8 @@ _resource_out = ns.model("ResourceRecord", {
     "full_name": fields.String(description="Nombre completo del colaborador"),
     "email": fields.String(description="Email corporativo @sywork.net"),
     "active": fields.Boolean(description="Estado activo"),
+    "user_active": fields.Boolean(description="Estado de la cuenta de usuario vinculada "
+                                   "(null si no hay user_id); OBS-0047", allow_null=True),
     "notes": fields.String(description="Notas internas"),
     "identification": fields.String(description="Número de identificación"),
     "nationality": fields.String(description="Nacionalidad"),
@@ -182,6 +184,7 @@ def _resource_to_dict(resource) -> dict:
         "full_name": resource.full_name,
         "email": resource.email,
         "active": resource.active,
+        "user_active": resource.user_active,
         "notes": resource.notes,
         "identification": resource.identification,
         "nationality": resource.nationality,

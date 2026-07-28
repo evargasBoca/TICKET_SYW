@@ -23,8 +23,11 @@ export function useResourceCandidates(enabled: boolean): ResourceCandidates {
 
   useEffect(() => {
     if (!enabled) return
-    resourceService.list({ active: true, page_size: 100 }).then(r => setResources(r.items))
-      .catch(() => message.error('No se pudo cargar la lista de recursos'))
+    resourceService.list({ active: true, page_size: 100 }).then(r => setResources(
+      // OBS-0047: un recurso puede seguir activo como recurso de RRHH con la cuenta de
+      // usuario vinculada desactivada — sin acceso al sistema, no debe ofrecerse para asignar.
+      r.items.filter(res => res.user_active !== false)
+    )).catch(() => message.error('No se pudo cargar la lista de recursos'))
     ticketService.panel().then(data => {
       const map: Record<string, number> = {}
       data.matrix.forEach(row => { map[row.resource.id] = row.total })
