@@ -44,12 +44,12 @@ def test_comment_strips_script_and_event_handler(client, make_ticket):
     assert "<script>" not in body
 
 
-def test_ticket_description_with_formatting_is_sanitized(client, ticket_client):
+def test_ticket_description_with_formatting_is_sanitized(client, ticket_client, ticket_project):
     resp = client.post("/api/tickets", json={
         "title": "Ticket con descripción enriquecida",
         "description": '<p><em>cursiva</em></p><ul><li>uno</li><li>dos</li></ul>',
         "ticket_type": "incident", "priority": "medium", "severity": "s3",
-        "client_id": ticket_client["id"],
+        "client_id": ticket_client["id"], "project_id": ticket_project["id"],
     })
     assert resp.status_code == 201, resp.get_json()
     description = resp.get_json()["description"]
@@ -57,12 +57,12 @@ def test_ticket_description_with_formatting_is_sanitized(client, ticket_client):
     assert "<li>uno</li>" in description
 
 
-def test_ticket_description_html_empty_rejected(client, ticket_client):
+def test_ticket_description_html_empty_rejected(client, ticket_client, ticket_project):
     resp = client.post("/api/tickets", json={
         "title": "Ticket con descripción vacía",
         "description": "<p></p>",
         "ticket_type": "incident", "priority": "medium", "severity": "s3",
-        "client_id": ticket_client["id"],
+        "client_id": ticket_client["id"], "project_id": ticket_project["id"],
     })
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "validation_error"
@@ -87,12 +87,12 @@ def test_comment_multipart_with_inline_image_resolves_pending_id(client, make_ti
     assert f"/api/tickets/{ticket['id']}/attachments/{att['id']}" in comment["body"]
 
 
-def test_ticket_multipart_with_inline_image_in_description(client, ticket_client):
+def test_ticket_multipart_with_inline_image_in_description(client, ticket_client, ticket_project):
     data = {
         "title": "Ticket con imagen pegada en la descripción",
         "description": '<p>ver adjunto</p><img data-pending-id="0">',
         "ticket_type": "incident", "priority": "medium", "severity": "s3",
-        "client_id": ticket_client["id"],
+        "client_id": ticket_client["id"], "project_id": ticket_project["id"],
         "inline_images": (io.BytesIO(b"fake-png-bytes"), "captura.png"),
     }
     resp = client.post("/api/tickets", data=data, content_type="multipart/form-data")
@@ -122,12 +122,12 @@ def test_comment_multipart_invalid_inline_image_rejected(client, make_ticket):
 
 # ── US3: adjuntar archivos (no imagen) a la descripción del Ticket/Tarea ───────────────────
 
-def test_ticket_multipart_with_manual_attachment(client, ticket_client):
+def test_ticket_multipart_with_manual_attachment(client, ticket_client, ticket_project):
     data = {
         "title": "Ticket con adjunto manual en la descripción",
         "description": "<p>ver PDF adjunto</p>",
         "ticket_type": "incident", "priority": "medium", "severity": "s3",
-        "client_id": ticket_client["id"],
+        "client_id": ticket_client["id"], "project_id": ticket_project["id"],
         "attachments": (io.BytesIO(b"contenido pdf"), "manual.pdf"),
     }
     resp = client.post("/api/tickets", data=data, content_type="multipart/form-data")
@@ -141,12 +141,12 @@ def test_ticket_multipart_with_manual_attachment(client, ticket_client):
     assert download.data == b"contenido pdf"
 
 
-def test_ticket_multipart_manual_attachment_type_not_allowed(client, ticket_client):
+def test_ticket_multipart_manual_attachment_type_not_allowed(client, ticket_client, ticket_project):
     data = {
         "title": "Ticket con adjunto no permitido",
         "description": "<p>ver adjunto</p>",
         "ticket_type": "incident", "priority": "medium", "severity": "s3",
-        "client_id": ticket_client["id"],
+        "client_id": ticket_client["id"], "project_id": ticket_project["id"],
         "attachments": (io.BytesIO(b"MZ"), "virus.exe"),
     }
     resp = client.post("/api/tickets", data=data, content_type="multipart/form-data")

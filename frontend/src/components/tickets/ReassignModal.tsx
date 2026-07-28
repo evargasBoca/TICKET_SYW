@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Input, Modal, message } from 'antd'
+import { App, Input, Modal } from 'antd'
 import { SwapOutlined } from '@ant-design/icons'
 import { ticketService } from '../../services/ticketService'
 import { useResourceCandidates } from './useResourceCandidates'
@@ -16,6 +16,7 @@ interface ReassignModalProps {
  * complejidad, sin cambiar el estado del ticket. Muestra la misma carga y disponibilidad que
  * la asignación inicial (spec 024, "las mismas sugerencias... como la asignación inicial"). */
 export default function ReassignModal({ ticketId, currentAssigneeId, onClose, onReassigned }: ReassignModalProps) {
+  const { message } = App.useApp()
   const { resources, workload, availability } = useResourceCandidates(!!ticketId)
   const [selected, setSelected] = useState<string | undefined>()
   const [reason, setReason] = useState('')

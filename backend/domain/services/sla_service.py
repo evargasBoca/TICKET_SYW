@@ -265,6 +265,7 @@ def compute_state(ticket, now: datetime, resource=None, holidays: list | None = 
             "phase": None, "status": "sin_sla", "phase_limit_minutes": None,
             "consumed_seconds": 0, "rule_id": None,
             "contact_result": ticket.sla_contact_result, "contact_consumed_seconds": None,
+            "execution_result": ticket.sla_execution_result, "execution_consumed_seconds": None,
             "pause_reason": None,
         }
     consumed = compute_consumed_seconds(ticket, now, resource, holidays, schedule_slots, absences)
@@ -290,6 +291,8 @@ def compute_state(ticket, now: datetime, resource=None, holidays: list | None = 
         "rule_id": str(ticket.sla_rule_id) if ticket.sla_rule_id else None,
         "contact_result": ticket.sla_contact_result,
         "contact_consumed_seconds": ticket.sla_contact_consumed_seconds,
+        "execution_result": ticket.sla_execution_result,
+        "execution_consumed_seconds": ticket.sla_execution_consumed_seconds,
         "pause_reason": pause_reason,
     }
 
@@ -321,8 +324,17 @@ def apply_transition(ticket, new_status: str, now: datetime, sla_rule_repo, reso
     if new_status in ("resuelto", "cerrado", "cancelado"):
         # Detiene definitivamente el cómputo (FR-006). `resuelto` puede reabrirse
         # (reject_resolution) — ver rama de reanudación más abajo.
-        return {"sla_consumed_seconds": consumed, "sla_last_resume_at": None,
-                "sla_phase": "cerrado", "sla_status": "detenido"}
+        updates = {"sla_consumed_seconds": consumed, "sla_last_resume_at": None,
+                   "sla_phase": "cerrado", "sla_status": "detenido"}
+        if previous_phase == "ejecucion":
+            # OBS-0059 (spec 033): análogo al cierre de Contacto (FR-004b) — se congela el
+            # resultado de la fase Ejecución si llegó a correr. Si el ticket se cerró/canceló
+            # todavía en fase Contacto (nunca llegó a Ejecución), queda en None (no aplica).
+            execution_limit = ticket.sla_phase_limit_minutes
+            updates["sla_execution_result"] = (
+                "vencido" if (execution_limit and consumed >= execution_limit * 60) else "cumplido")
+            updates["sla_execution_consumed_seconds"] = consumed
+        return updates
 
     new_phase = SLA_PHASE_FOR_STATE.get(new_status)
 

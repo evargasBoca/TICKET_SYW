@@ -54,6 +54,9 @@ export default function TicketDetailPage() {
   const { hasPermission } = useAuthStore()
   const canAssign = hasPermission('tickets', 'assign')
   const canEdit = hasPermission('tickets', 'edit')
+  // OBS-0047/0048 (spec 033): permiso dedicado para "Skills requeridas" (solo Coordinador) —
+  // Admin/QM ya no pueden editarlas aunque tengan tickets:edit.
+  const canManageSkills = hasPermission('tickets', 'manage_skills')
   const canTrackTime = hasPermission('work_sessions', 'manage')
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -341,7 +344,7 @@ export default function TicketDetailPage() {
               </Descriptions.Item>
               <Descriptions.Item label="Skills requeridas">
                 <TicketSkillsSelector
-                  ticketId={ticket.id} skills={ticket.skills} editable={canEdit}
+                  ticketId={ticket.id} skills={ticket.skills} editable={canManageSkills}
                   onUpdated={skills => setTicket({ ...ticket, skills })}
                 />
               </Descriptions.Item>

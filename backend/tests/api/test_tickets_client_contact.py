@@ -17,8 +17,11 @@ def _make_contact(client, client_id, unique_name, suffix=""):
 
 # ── Creación (T009/T010, US1) ────────────────────────────────────────────────
 
-def test_create_ticket_with_client_contact_sets_requester(client, unique_name, ticket_client, make_ticket):
+def test_create_ticket_with_client_contact_sets_requester(client, unique_name, ticket_client, ticket_project, make_ticket):
     contact = _make_contact(client, ticket_client["id"], unique_name)
+    # OBS-0045: make_ticket ya envía project_id (ticket_project) por defecto — el solicitante
+    # debe estar vinculado a ESE proyecto (spec 010, contact_not_in_project).
+    _link_to_project(client, ticket_project["id"], contact["user_id"])
     created = make_ticket(client_contact_id=contact["id"])
     assert created["client_contact_id"] == contact["id"]
 
@@ -30,7 +33,7 @@ def test_create_ticket_with_client_contact_sets_requester(client, unique_name, t
     assert body["requester"]["is_encargado"] is True
 
 
-def test_create_ticket_client_contact_from_other_client_returns_409(client, unique_name, ticket_client):
+def test_create_ticket_client_contact_from_other_client_returns_409(client, unique_name, ticket_client, ticket_project):
     other_client = client.post("/api/clients", json={"name": f"Otro Cliente {unique_name}"}).get_json()
     contact = _make_contact(client, other_client["id"], unique_name, suffix="_other")
     resp = client.post("/api/tickets", json={
@@ -38,18 +41,20 @@ def test_create_ticket_client_contact_from_other_client_returns_409(client, uniq
         "description": "Descripción",
         "ticket_type": "incident", "priority": "high", "severity": "s2",
         "client_id": ticket_client["id"],
+        "project_id": ticket_project["id"],
         "client_contact_id": contact["id"],
     })
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "client_contact_mismatch"
 
 
-def test_create_ticket_client_contact_not_found_returns_404(client, ticket_client):
+def test_create_ticket_client_contact_not_found_returns_404(client, ticket_client, ticket_project):
     resp = client.post("/api/tickets", json={
         "title": "Ticket con encargado inexistente",
         "description": "Descripción",
         "ticket_type": "incident", "priority": "high", "severity": "s2",
         "client_id": ticket_client["id"],
+        "project_id": ticket_project["id"],
         "client_contact_id": str(uuid.uuid4()),
     })
     assert resp.status_code == 404
@@ -80,19 +85,24 @@ def test_resolver_can_list_client_contacts(client, resolver_auth, ticket_client,
 
 # ── Edición (T015/T016, US2) ─────────────────────────────────────────────────
 
-def test_patch_assigns_client_contact_to_ticket_without_one(client, unique_name, ticket_client, make_ticket):
-    contact = _make_contact(client, ticket_client["id"], unique_name, suffix="_patch1")
+def test_patch_assigns_client_contact_to_ticket_without_one(client, unique_name, ticket_client, ticket_project, make_ticket):
+    # Se crea el ticket ANTES de vincular el contacto al proyecto: en el momento de crear, el
+    # proyecto todavía no tiene ningún contacto (OBS-0045 no lo exige en ese caso).
     created = make_ticket()
     assert created["client_contact_id"] is None
+    contact = _make_contact(client, ticket_client["id"], unique_name, suffix="_patch1")
+    _link_to_project(client, ticket_project["id"], contact["user_id"])
 
     resp = client.patch(f"/api/tickets/{created['id']}", json={"client_contact_id": contact["id"]})
     assert resp.status_code == 200, resp.get_json()
     assert resp.get_json()["client_contact_id"] == contact["id"]
 
 
-def test_patch_reassigns_to_another_client_contact_of_same_client(client, unique_name, ticket_client, make_ticket):
+def test_patch_reassigns_to_another_client_contact_of_same_client(client, unique_name, ticket_client, ticket_project, make_ticket):
     first = _make_contact(client, ticket_client["id"], unique_name, suffix="_patch2a")
     second = _make_contact(client, ticket_client["id"], unique_name, suffix="_patch2b")
+    _link_to_project(client, ticket_project["id"], first["user_id"])
+    _link_to_project(client, ticket_project["id"], second["user_id"])
     created = make_ticket(client_contact_id=first["id"])
 
     resp = client.patch(f"/api/tickets/{created['id']}", json={"client_contact_id": second["id"]})
@@ -176,11 +186,16 @@ def test_create_ticket_with_contact_not_in_project_returns_409(client, unique_na
     assert resp.get_json()["error"] == "contact_not_in_project"
 
 
-def test_create_ticket_with_contact_and_no_project_keeps_client_rule(client, unique_name, ticket_client, make_ticket):
-    """Sin proyecto no hay chequeo de membresía — comportamiento spec 007 intacto."""
-    contact = _make_contact(client, ticket_client["id"], unique_name, suffix="_noproj")
-    created = make_ticket(client_contact_id=contact["id"])
-    assert created["client_contact_id"] == contact["id"]
+def test_create_ticket_without_project_is_rejected(client, ticket_client):
+    """OBS-0045: Proyecto es obligatorio al crear un Ticket desde perfil interno — antes de esta
+    observación, un ticket podía crearse sin proyecto (comportamiento previo, ya no vigente)."""
+    resp = client.post("/api/tickets", json={
+        "title": "Ticket sin proyecto", "description": "Descripción",
+        "ticket_type": "incident", "priority": "high", "severity": "s2",
+        "client_id": ticket_client["id"],
+    })
+    assert resp.status_code == 400
+    assert "project_id" in resp.get_json()["message"]
 
 
 def test_patch_contact_not_in_ticket_project_returns_409(client, unique_name, ticket_client, make_ticket):

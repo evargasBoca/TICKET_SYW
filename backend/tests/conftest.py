@@ -96,6 +96,19 @@ def resolver_user(db_session, unique_name):
     return UserRepository(db_session).create(user)
 
 
+@pytest.fixture()
+def qm_user(db_session, unique_name):
+    """OBS-0052/0053: usuario QM de prueba sin perfil de recurso propio — los candidatos para
+    "Pre-Análisis" se listan/asignan por rol, no por la tabla `resources`."""
+    from backend.infra.repositories.role_repo import RoleRepository
+    qm_role = RoleRepository(db_session).get_by_name("QM")
+    user = User(
+        id=uuid.uuid4(), email=f"test.qm.{unique_name}@sywork.net", username=f"test_qm_{unique_name}",
+        role=qm_role, active=True,
+    )
+    return UserRepository(db_session).create(user)
+
+
 # ── Fixtures compartidos de tickets (usados por tests/api y tests/infra) ────────
 
 @pytest.fixture()
@@ -119,7 +132,21 @@ def ticket_resource(client, unique_name, resolver_user):
 
 
 @pytest.fixture()
-def make_ticket(client, ticket_client):
+def ticket_project(client, ticket_client, unique_name):
+    """Proyecto activo de prueba, vinculado a `ticket_client` — OBS-0045: Proyecto pasa a ser
+    obligatorio al crear un Ticket (no Tarea) desde perfil interno."""
+    import datetime
+    response = client.post("/api/projects", json={
+        "name": f"Proyecto Tickets {unique_name}",
+        "client_id": ticket_client["id"],
+        "start_date": datetime.date.today().isoformat(),
+    })
+    assert response.status_code == 201, response.get_json()
+    return response.get_json()
+
+
+@pytest.fixture()
+def make_ticket(client, ticket_client, ticket_project):
     """Factory de tickets en estado NUEVO."""
     def _make(**overrides):
         payload = {
@@ -129,6 +156,7 @@ def make_ticket(client, ticket_client):
             "priority": "high",
             "severity": "s2",
             "client_id": ticket_client["id"],
+            "project_id": ticket_project["id"],
             **overrides,
         }
         response = client.post("/api/tickets", json=payload)
@@ -144,6 +172,13 @@ def resolver_auth(app, resolver_user):
     with app.app_context():
         token = create_access_token(identity=str(resolver_user.id))
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def coordinator_auth(coordinator_token):
+    """Header Authorization del Coordinador semilla (único rol con tickets:manage_skills,
+    OBS-0047/0048 spec 033)."""
+    return {"Authorization": f"Bearer {coordinator_token}"}
 
 
 @pytest.fixture()

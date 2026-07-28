@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { message } from 'antd'
+import { App } from 'antd'
 import { resourceService } from '../../services/resourceService'
 import { ticketService } from '../../services/ticketService'
 import { calendarService } from '../../services/calendarService'
@@ -17,6 +17,7 @@ interface ResourceCandidates {
  * asignación inicial"). La disponibilidad es informativa (nunca bloquea, FR-015 de spec 020),
  * por eso su fallo se ignora en silencio igual que ya hacía `AssignModal`. */
 export function useResourceCandidates(enabled: boolean): ResourceCandidates {
+  const { message } = App.useApp()
   const [resources, setResources] = useState<Resource[]>([])
   const [workload, setWorkload] = useState<Record<string, number>>({})
   const [availability, setAvailability] = useState<Record<string, Availability>>({})

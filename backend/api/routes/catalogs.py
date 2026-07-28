@@ -5,7 +5,7 @@ from backend.api.middleware.rbac import require_permission
 from backend.api.routes._shared import parse_uuid, error_model, server_error
 from backend.infra.database import get_db
 from backend.infra.models.catalog_model import CATALOG_MODELS, CATALOG_TICKET_COLUMN
-from backend.infra.repositories.catalog_repo import CatalogRepository
+from backend.infra.repositories.catalog_repo import CatalogRepository, ToolProcessRepository
 from backend.infra.repositories.ticket_repo import TicketRepository
 
 ns = Namespace("catalogs",
@@ -132,5 +132,68 @@ class CatalogActivate(Resource):
             if not result:
                 return {"error": "not_found", "message": "Valor no encontrado"}, 404
             return result, 200
+        except Exception:
+            return server_error()
+
+
+_tool_process_out = ns.model("ToolProcessLink", {
+    "tool_id": fields.String(description="UUID de catalog_tools"),
+    "process_id": fields.String(description="UUID de catalog_processes"),
+})
+
+_tool_process_input = ns.model("ToolProcessInput", {
+    "tool_id": fields.String(required=True),
+    "process_id": fields.String(required=True),
+})
+
+
+@ns.route("/tool-processes")
+class ToolProcessList(Resource):
+    @ns.doc("list_tool_processes")
+    @ns.response(200, "Vínculos Herramienta-Proceso (OBS-0049)", [_tool_process_out])
+    @require_permission("catalogs", "view")
+    def get(self):
+        """Listar todos los vínculos sugeridos Herramienta↔Proceso"""
+        try:
+            items = ToolProcessRepository(get_db()).list_all()
+            return {"items": items, "total": len(items)}, 200
+        except Exception:
+            return server_error()
+
+    @ns.doc("create_tool_process")
+    @ns.expect(_tool_process_input, validate=False)
+    @ns.response(201, "Vínculo creado", _tool_process_out)
+    @ns.response(400, "tool_id/process_id inválido o ausente", _error)
+    @require_permission("catalogs", "create")
+    def post(self):
+        """Vincular una Herramienta con un Proceso (sugerencia, no restricción — OBS-0049)"""
+        data = request.get_json(silent=True) or {}
+        tool_id = parse_uuid(data.get("tool_id"))
+        process_id = parse_uuid(data.get("process_id"))
+        if not tool_id or not process_id:
+            return {"error": "validation_error", "message": "tool_id y process_id son requeridos"}, 400
+        try:
+            return ToolProcessRepository(get_db()).link(tool_id, process_id), 201
+        except Exception:
+            return server_error()
+
+
+@ns.route("/tool-processes/<string:tool_id>/<string:process_id>")
+class ToolProcessDetail(Resource):
+    @ns.doc("delete_tool_process")
+    @ns.response(204, "Vínculo eliminado")
+    @ns.response(400, "ID inválido", _error)
+    @ns.response(404, "Vínculo no encontrado", _error)
+    @require_permission("catalogs", "deactivate")
+    def delete(self, tool_id: str, process_id: str):
+        """Quitar un vínculo Herramienta↔Proceso"""
+        tid, pid = parse_uuid(tool_id), parse_uuid(process_id)
+        if not tid or not pid:
+            return {"error": "validation_error", "message": "ID inválido"}, 400
+        try:
+            ok = ToolProcessRepository(get_db()).unlink(tid, pid)
+            if not ok:
+                return {"error": "not_found", "message": "Vínculo no encontrado"}, 404
+            return "", 204
         except Exception:
             return server_error()

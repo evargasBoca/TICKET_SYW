@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Form, Input, Modal, Row, Col, Segmented, Select, Space, Table, Tooltip, Upload, message } from 'antd'
+import { Alert, App, Button, Descriptions, Form, Input, Modal, Row, Col, Segmented, Select, Space, Table, Tooltip, Upload } from 'antd'
 import {
   PlusOutlined, EyeOutlined, UserSwitchOutlined, InboxOutlined, ThunderboltOutlined,
   ClockCircleOutlined, CheckCircleOutlined, FieldTimeOutlined, UploadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType, TableProps } from 'antd/es/table'
+import type { DefaultOptionType } from 'antd/es/select'
 import type { UploadFile } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import SortIndicator from '../components/tickets/SortIndicator'
@@ -15,11 +16,13 @@ import { clientContactService } from '../services/clientContactService'
 import { catalogService } from '../services/catalogService'
 import { resourceService, skillService } from '../services/resourceService'
 import { taskListService } from '../services/taskListService'
+import { slaService } from '../services/slaService'
+import type { SlaRule } from '../types/sla'
 import type {
   TicketListItem, TicketFormData, TicketStatus, Priority, Severity,
 } from '../types/ticket'
 import { STATUS_LABELS, TICKET_TYPE_LABELS, PRIORITY_LABELS, SEVERITY_LABELS } from '../types/ticket'
-import type { CatalogItem } from '../types/catalog'
+import type { CatalogItem, ToolProcessLink } from '../types/catalog'
 import type { ClientListItem } from '../types/client'
 import type { ProjectListItem } from '../types/project'
 import type { Resource, Skill } from '../types/resource'
@@ -59,7 +62,9 @@ const TICKET_ERROR_RULES: FieldErrorRule[] = [
   { code: 'title_blank', field: 'title' },
   { code: 'title_invalid_chars', field: 'title' },
   { code: 'validation_error', field: 'client_id', messageIncludes: ['client_id'] },
-  { code: 'validation_error', field: 'project_id', messageIncludes: ['proyecto no pertenece'] },
+  // OBS-0045: project_id/client_contact_id obligatorios al crear un Ticket desde perfil interno.
+  { code: 'validation_error', field: 'project_id', messageIncludes: ["'project_id'", 'proyecto no pertenece'] },
+  { code: 'validation_error', field: 'client_contact_id', messageIncludes: ["'client_contact_id'"] },
   { code: 'client_inactive', field: 'client_id' },
   { code: 'project_inactive', field: 'project_id' },
   { code: 'project_not_assigned', field: 'project_id' },
@@ -86,10 +91,15 @@ const SLA_STATUS_OPTIONS = [
 ]
 
 export default function TicketsPage() {
+  const { message } = App.useApp()
   const { hasPermission, role } = useAuthStore()
   const navigate = useNavigate()
   const canCreate = hasPermission('tickets', 'create')
   const canAssign = hasPermission('tickets', 'assign')
+  // OBS-0047/0048 (spec 033): "Skills requeridas" pasa a un permiso dedicado (solo Coordinador)
+  // en vez de tickets:edit — Admin/QM crean tickets sin poder fijar Skills requeridas (las puede
+  // agregar después un Coordinador desde el detalle del ticket).
+  const canManageSkills = hasPermission('tickets', 'manage_skills')
   /** Usuario/cliente (Fase 2.1 US3, renombrado spec 010): alta simplificada (solo título/descripción), sin acceso a
    * catálogos/clientes/recursos internos — el backend ya filtra su listado a lo propio. */
   const isEncargado = role?.name === 'Usuario/cliente'
@@ -110,10 +120,16 @@ export default function TicketsPage() {
 
   const [clients, setClients] = useState<ClientListItem[]>([])
   const [projects, setProjects] = useState<ProjectListItem[]>([])
+  // OBS-0045/0046: todos los proyectos activos, sin filtrar por cliente — el flujo de creación
+  // de Ticket (no Tarea) desde perfil interno elige Proyecto primero y deriva el Cliente de ahí.
+  const [allProjects, setAllProjects] = useState<ProjectListItem[]>([])
+  const [projectSlaRules, setProjectSlaRules] = useState<SlaRule[]>([])
   const [myProjects, setMyProjects] = useState<ProjectListItem[]>([])
   const [contacts, setContacts] = useState<ClientContact[]>([])
   const [tools, setTools] = useState<CatalogItem[]>([])
   const [processes, setProcesses] = useState<CatalogItem[]>([])
+  // OBS-0049: vínculos sugeridos Herramienta↔Proceso (guía, no restricción).
+  const [toolProcessLinks, setToolProcessLinks] = useState<ToolProcessLink[]>([])
   const [resources, setResources] = useState<Resource[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [recordTypes, setRecordTypes] = useState<CatalogItem[]>([])
@@ -126,10 +142,46 @@ export default function TicketsPage() {
   const selectedClientId = Form.useWatch('client_id', form)
   const selectedProjectId = Form.useWatch('project_id', form)
   const selectedRecordTypeId = Form.useWatch('record_type_id', form)
+  const selectedPriority = Form.useWatch('priority', form)
+  const selectedToolId = Form.useWatch('tool_id', form)
+  const selectedProcessId = Form.useWatch('process_id', form)
   /** Fase 3: "Tarea" oculta la clasificación de incidente y muestra "Lista" (FR-001/002/010).
    * spec 009: el formulario reducido se mantiene (Assumptions) — solo cambia "Lista" de texto
    * libre a una entidad real (`list_id`, acotada al Proyecto elegido). */
   const isTaskSelected = recordTypes.find(rt => rt.id === selectedRecordTypeId)?.name === 'Tarea'
+  // OBS-0045/0046: Proyecto/Usuario-cliente obligatorios y Cliente auto-derivado solo aplican a
+  // la creación de Tickets (no Tareas) desde perfil interno — autoservicio y Tareas conservan
+  // el comportamiento previo (ambos opcionales, Cliente elegido manualmente).
+  const projectRequiredFlow = !isEncargado && !isTaskSelected
+  const selectedProject = allProjects.find(p => p.id === selectedProjectId)
+  const applicableSlaRule = projectSlaRules.find(r => r.priority === selectedPriority)
+
+  // OBS-0049: Proceso sugerido (no restrictivo) según la Herramienta elegida — se agrupa en
+  // "Sugeridos"/"Otros" pero cualquier combinación sigue siendo seleccionable.
+  const linkedProcessIds = new Set(
+    toolProcessLinks.filter(l => l.tool_id === selectedToolId).map(l => l.process_id))
+  const processOptions: DefaultOptionType[] = selectedToolId && linkedProcessIds.size > 0
+    ? [
+        { label: 'Sugeridos', options: processes.filter(p => linkedProcessIds.has(p.id))
+            .map(p => ({ value: p.id, label: p.name })) },
+        { label: 'Otros', options: processes.filter(p => !linkedProcessIds.has(p.id))
+            .map(p => ({ value: p.id, label: p.name })) },
+      ]
+    : processes.map(p => ({ value: p.id, label: p.name }))
+
+  // OBS-0047/0048: Skills sugeridas (no impuestas) derivadas de la Herramienta y/o Proceso ya
+  // elegidos en el ticket — `skill.tool_id`/`skill.process_id` ya existen en el catálogo de Skills.
+  const suggestedSkillIds = new Set(
+    skills.filter(s => (selectedToolId && s.tool_id === selectedToolId)
+      || (selectedProcessId && s.process_id === selectedProcessId)).map(s => s.id))
+  const skillOptions: DefaultOptionType[] = suggestedSkillIds.size > 0
+    ? [
+        { label: 'Sugeridas', options: skills.filter(s => suggestedSkillIds.has(s.id))
+            .map(s => ({ value: s.id, label: `${s.code} — ${s.label}` })) },
+        { label: 'Otras', options: skills.filter(s => !suggestedSkillIds.has(s.id))
+            .map(s => ({ value: s.id, label: `${s.code} — ${s.label}` })) },
+      ]
+    : skills.map(s => ({ value: s.id, label: `${s.code} — ${s.label}` }))
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -180,10 +232,15 @@ export default function TicketsPage() {
     if (isEncargado) return  // sin permiso sobre clients/catalogs/resources — alta simplificada
     clientService.list({ active: true, page_size: 100 }).then(r => setClients(r.items))
       .catch(() => message.error('No se pudo cargar la lista de clientes'))
+    // OBS-0045/0046: catálogo completo de proyectos activos para el flujo Proyecto→Cliente.
+    projectService.list({ active: true, page_size: 100 }).then(r => setAllProjects(r.items))
+      .catch(() => message.error('No se pudo cargar la lista de proyectos'))
     catalogService.list('tools').then(r => setTools(r.items))
       .catch(() => message.error('No se pudo cargar el catálogo de herramientas'))
     catalogService.list('processes').then(r => setProcesses(r.items))
       .catch(() => message.error('No se pudo cargar el catálogo de procesos'))
+    // OBS-0049: vínculos sugeridos Herramienta↔Proceso para guiar (no restringir) el selector.
+    catalogService.listToolProcesses().then(r => setToolProcessLinks(r.items)).catch(() => undefined)
     resourceService.list({ active: true, page_size: 100 }).then(r => setResources(r.items))
       .catch(() => message.error('No se pudo cargar la lista de recursos'))
     skillService.list(true).then(r => setSkills(r.items))
@@ -202,15 +259,19 @@ export default function TicketsPage() {
       projectService.list({ client_id: selectedClientId, active: true, page_size: 100 })
         .then(r => setProjects(r.items))
         .catch(() => message.error('No se pudo cargar la lista de proyectos'))
-      form.setFieldValue('project_id', undefined)
-      // Se limpia al cambiar de cliente para no dejar seleccionado uno de un cliente
-      // distinto (FR-005 spec 007; la fuente ahora es el proyecto, spec 010).
-      form.setFieldValue('client_contact_id', undefined)
+      // OBS-0046: en el flujo de Ticket, el Cliente se auto-completa DESDE el Proyecto elegido
+      // (dirección invertida) — limpiar aquí project_id/client_contact_id borraría justo lo que
+      // se acaba de derivar. Ese reset solo tiene sentido cuando el Cliente se elige a mano,
+      // que hoy es el flujo de Tarea (Cliente→Proyecto, sin cambios respecto al comportamiento previo).
+      if (isTaskSelected) {
+        form.setFieldValue('project_id', undefined)
+        form.setFieldValue('client_contact_id', undefined)
+      }
     } else {
       setProjects([])
-      setContacts([])
+      if (isTaskSelected) setContacts([])
     }
-  }, [selectedClientId, form])
+  }, [selectedClientId, form, isTaskSelected])
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -230,12 +291,29 @@ export default function TicketsPage() {
     }
   }, [selectedProjectId, form])
 
+  useEffect(() => {
+    if (!projectRequiredFlow) return
+    if (selectedProjectId && selectedProject) {
+      // OBS-0046: el Cliente se deriva del Proyecto elegido, sin selección manual.
+      form.setFieldValue('client_id', selectedProject.client_id)
+      slaService.list({ project_id: selectedProjectId, page_size: 100 })
+        .then(r => setProjectSlaRules(r.items))
+        .catch(() => setProjectSlaRules([]))
+    } else {
+      form.setFieldValue('client_id', undefined)
+      setProjectSlaRules([])
+    }
+  }, [projectRequiredFlow, selectedProjectId, selectedProject, form])
+
   const handleCreate = async (values: TicketFormData) => {
     try {
       const { skill_ids, ...ticketFields } = values
       const rawAttachments = descriptionAttachments.map(f => f.originFileObj).filter((f): f is NonNullable<typeof f> => !!f)
       const created = await ticketService.create(ticketFields, pendingDescriptionImages, rawAttachments)
-      if (skill_ids?.length) {
+      // OBS-0047/0048: solo quien tiene tickets:manage_skills fija Skills requeridas (el campo
+      // ni siquiera se muestra sin el permiso, pero se guarda por si acaso cambia el rol a mitad
+      // de una sesión abierta).
+      if (canManageSkills && skill_ids?.length) {
         await ticketService.updateTicketSkills(created.id, skill_ids)
       }
       message.success(`Ticket ${created.ticket_number} creado`)
@@ -359,7 +437,9 @@ export default function TicketsPage() {
           <StatCard label="Nuevos" value={stats?.nuevo ?? '—'} icon={<InboxOutlined />} color="blue" sub="Pendientes de triage" />
         </Col>
         <Col xs={12} md={8} lg={4}>
-          <StatCard label="En progreso" value={stats?.enProgreso ?? '—'} icon={<ThunderboltOutlined />} color="orange" sub="Contacto → En pruebas" />
+          {/* OBS-0051: "En progreso" se leía como si fuera un estado real del ciclo de vida;
+             "Activos" deja claro que es un agregado, el subtítulo ya lista los estados que agrupa. */}
+          <StatCard label="Activos" value={stats?.enProgreso ?? '—'} icon={<ThunderboltOutlined />} color="orange" sub="Contacto → En pruebas (varios estados)" />
         </Col>
         <Col xs={12} md={8} lg={4}>
           <StatCard label="Pend. usuario" value={stats?.pendienteUsuario ?? '—'} icon={<ClockCircleOutlined />} color="magenta" sub="SLA pausado (Fase 4)" />
@@ -441,31 +521,69 @@ export default function TicketsPage() {
               rules={[{ required: true, message: 'Selecciona el tipo de registro' }]}>
               <Segmented options={recordTypes.map(rt => ({ value: rt.id, label: rt.name }))} />
             </Form.Item>
-            <Space style={{ display: 'flex' }} align="start" wrap>
-              <Form.Item name="client_id" label="Cliente" rules={[{ required: true, message: 'El cliente es requerido' }]}>
-                <Select showSearch optionFilterProp="label" placeholder="Cliente" style={{ width: 220 }}
-                  options={clients.map(c => ({ value: c.id, label: c.name }))} />
-              </Form.Item>
-              <Form.Item name="project_id" label="Proyecto (opcional)">
-                <Select allowClear placeholder={selectedClientId ? 'Proyecto' : 'Elige cliente primero'}
-                  disabled={!selectedClientId} style={{ width: 220 }}
-                  options={projects.map(p => ({ value: p.id, label: p.name }))} />
-              </Form.Item>
-              <Form.Item name="client_contact_id" label="Usuario/cliente (opcional)">
-                <Select allowClear placeholder={
-                  !selectedProjectId ? 'Elige proyecto primero'
-                    : contacts.length === 0 ? 'Sin personal Usuario/cliente en el proyecto' : 'Usuario/cliente'
-                } disabled={!selectedProjectId || contacts.length === 0} style={{ width: 220 }}
-                  options={contacts.map(c => ({ value: c.id, label: c.username }))} />
-              </Form.Item>
-              {isTaskSelected && (
-                <Form.Item name="list_id" label="Lista (opcional)">
-                  <Select allowClear placeholder={selectedProjectId ? 'Lista' : 'Elige proyecto primero'}
-                    disabled={!selectedProjectId} style={{ width: 200 }}
-                    options={taskLists.map(l => ({ value: l.id, label: l.name }))} />
+            {projectRequiredFlow ? (
+              <Space style={{ display: 'flex' }} align="start" wrap>
+                <Form.Item name="project_id" label="Proyecto" rules={[{ required: true, message: 'El proyecto es requerido' }]}>
+                  <Select showSearch optionFilterProp="label" placeholder="Proyecto" style={{ width: 220 }}
+                    options={allProjects.map(p => ({ value: p.id, label: p.client_name ? `${p.name} — ${p.client_name}` : p.name }))} />
                 </Form.Item>
-              )}
-            </Space>
+                {/* OBS-0046: Cliente se auto-completa (solo lectura) desde el Proyecto elegido. */}
+                <Form.Item name="client_id" label="Cliente" rules={[{ required: true, message: 'El proyecto es requerido' }]}>
+                  <Select disabled placeholder="Se completa al elegir el Proyecto" style={{ width: 220 }}
+                    options={selectedProject ? [{ value: selectedProject.client_id, label: selectedProject.client_name ?? '—' }] : []} />
+                </Form.Item>
+                <Form.Item name="client_contact_id" label="Usuario/cliente"
+                  rules={contacts.length > 0 ? [{ required: true, message: 'El Usuario/cliente solicitante es requerido' }] : []}>
+                  <Select allowClear placeholder={
+                    !selectedProjectId ? 'Elige proyecto primero'
+                      : contacts.length === 0 ? 'Sin personal Usuario/cliente en el proyecto' : 'Usuario/cliente'
+                  } disabled={!selectedProjectId || contacts.length === 0} style={{ width: 220 }}
+                    options={contacts.map(c => ({ value: c.id, label: c.username }))} />
+                </Form.Item>
+              </Space>
+            ) : (
+              <Space style={{ display: 'flex' }} align="start" wrap>
+                <Form.Item name="client_id" label="Cliente" rules={[{ required: true, message: 'El cliente es requerido' }]}>
+                  <Select showSearch optionFilterProp="label" placeholder="Cliente" style={{ width: 220 }}
+                    options={clients.map(c => ({ value: c.id, label: c.name }))} />
+                </Form.Item>
+                <Form.Item name="project_id" label="Proyecto (opcional)">
+                  <Select allowClear placeholder={selectedClientId ? 'Proyecto' : 'Elige cliente primero'}
+                    disabled={!selectedClientId} style={{ width: 220 }}
+                    options={projects.map(p => ({ value: p.id, label: p.name }))} />
+                </Form.Item>
+                <Form.Item name="client_contact_id" label="Usuario/cliente (opcional)">
+                  <Select allowClear placeholder={
+                    !selectedProjectId ? 'Elige proyecto primero'
+                      : contacts.length === 0 ? 'Sin personal Usuario/cliente en el proyecto' : 'Usuario/cliente'
+                  } disabled={!selectedProjectId || contacts.length === 0} style={{ width: 220 }}
+                    options={contacts.map(c => ({ value: c.id, label: c.username }))} />
+                </Form.Item>
+                {isTaskSelected && (
+                  <Form.Item name="list_id" label="Lista (opcional)">
+                    <Select allowClear placeholder={selectedProjectId ? 'Lista' : 'Elige proyecto primero'}
+                      disabled={!selectedProjectId} style={{ width: 200 }}
+                      options={taskLists.map(l => ({ value: l.id, label: l.name }))} />
+                  </Form.Item>
+                )}
+              </Space>
+            )}
+            {projectRequiredFlow && selectedProjectId && contacts.length === 0 && (
+              <Alert
+                type="warning" showIcon style={{ marginBottom: 12 }}
+                message="Este proyecto no tiene ningún Usuario/cliente cargado"
+                description='Puedes crear el ticket igual (el campo queda sin completar) — agrega un Usuario/cliente en Maestros > Usuarios/cliente para poder asociarlo la próxima vez.'
+              />
+            )}
+            {projectRequiredFlow && selectedProjectId && (
+              <Descriptions size="small" column={1} bordered style={{ marginBottom: 12 }}>
+                <Descriptions.Item label="Nivel de servicio (SLA)">
+                  {applicableSlaRule
+                    ? `Contacto: ${applicableSlaRule.contact_minutes} min · Ejecución: ${applicableSlaRule.execution_minutes} min (prioridad ${PRIORITY_LABELS[selectedPriority as Priority] ?? selectedPriority})`
+                    : 'Este proyecto/prioridad no tiene una regla de SLA configurada'}
+                </Descriptions.Item>
+              </Descriptions>
+            )}
             <>
               <Space style={{ display: 'flex' }} align="start" wrap>
                 <Form.Item name="ticket_type" label="Tipo" rules={isTaskSelected ? [] : [{ required: true }]}>
@@ -489,13 +607,15 @@ export default function TicketsPage() {
                 </Form.Item>
                 <Form.Item name="process_id" label="Proceso">
                   <Select allowClear placeholder="Proceso" style={{ width: 200 }}
-                    options={processes.map(p => ({ value: p.id, label: p.name }))} />
+                    options={processOptions} />
                 </Form.Item>
               </Space>
-              <Form.Item name="skill_ids" label="Skills requeridas (opcional)">
-                <Select mode="multiple" allowClear placeholder="Sin Skills requeridas"
-                  options={skills.map(s => ({ value: s.id, label: `${s.code} — ${s.label}` }))} />
-              </Form.Item>
+              {canManageSkills && (
+                <Form.Item name="skill_ids" label="Skills requeridas (opcional)">
+                  <Select mode="multiple" allowClear placeholder="Sin Skills requeridas"
+                    options={skillOptions} />
+                </Form.Item>
+              )}
             </>
           </>}
         </Form>

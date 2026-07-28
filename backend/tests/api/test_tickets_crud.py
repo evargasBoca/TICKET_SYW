@@ -24,10 +24,11 @@ def test_create_requires_mandatory_fields(client, ticket_client):
     assert "requerido" in response.get_json()["message"]
 
 
-def test_create_rejects_invalid_enum(client, ticket_client):
+def test_create_rejects_invalid_enum(client, ticket_client, ticket_project):
     response = client.post("/api/tickets", json={
         "title": "x", "description": "y", "ticket_type": "bug",
         "priority": "high", "severity": "s2", "client_id": ticket_client["id"],
+        "project_id": ticket_project["id"],
     })
     assert response.status_code == 400
     assert "ticket_type" in response.get_json()["message"]

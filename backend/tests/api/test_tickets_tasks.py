@@ -85,11 +85,16 @@ def test_create_task_with_related_ticket_of_same_client(client, ticket_client, t
 
 
 def test_create_task_related_ticket_of_other_client_returns_409(client, unique_name, ticket_client, tarea_record_type_id):
+    import datetime
     other_client = client.post("/api/clients", json={"name": f"Otro Cliente {unique_name}"}).get_json()
+    other_project = client.post("/api/projects", json={
+        "client_id": other_client["id"], "name": f"Proyecto Otro {unique_name}",
+        "start_date": datetime.date.today().isoformat(),
+    }).get_json()
     other_ticket = client.post("/api/tickets", json={
         "title": "Ticket de otro cliente", "description": "Descripción",
         "ticket_type": "incident", "priority": "high", "severity": "s2",
-        "client_id": other_client["id"],
+        "client_id": other_client["id"], "project_id": other_project["id"],
     }).get_json()
     resp = client.post("/api/tickets", json={
         "title": "Tarea con vinculo cruzado", "description": "Descripción",
@@ -102,11 +107,16 @@ def test_create_task_related_ticket_of_other_client_returns_409(client, unique_n
 
 def test_patch_ticket_related_ticket_of_other_client_returns_409(client, unique_name, ticket_client, make_ticket):
     """El fix de FR-005 aplica también a un Ticket normal, no solo a Tareas."""
+    import datetime
     other_client = client.post("/api/clients", json={"name": f"Otro Cliente Patch {unique_name}"}).get_json()
+    other_project = client.post("/api/projects", json={
+        "client_id": other_client["id"], "name": f"Proyecto Otro Patch {unique_name}",
+        "start_date": datetime.date.today().isoformat(),
+    }).get_json()
     other_ticket = client.post("/api/tickets", json={
         "title": "Ticket de otro cliente", "description": "Descripción",
         "ticket_type": "incident", "priority": "high", "severity": "s2",
-        "client_id": other_client["id"],
+        "client_id": other_client["id"], "project_id": other_project["id"],
     }).get_json()
     ticket = make_ticket()
     resp = client.patch(f"/api/tickets/{ticket['id']}", json={"related_ticket_id": other_ticket["id"]})

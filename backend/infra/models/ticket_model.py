@@ -58,6 +58,8 @@ class TicketModel(Base):
     sla_status = Column(Text, nullable=False, default="sin_sla")
     sla_contact_result = Column(Text, nullable=True)
     sla_contact_consumed_seconds = Column(Integer, nullable=True)
+    sla_execution_result = Column(Text, nullable=True)
+    sla_execution_consumed_seconds = Column(Integer, nullable=True)
 
     skills = relationship("SkillModel", secondary=ticket_skills_table, lazy="joined")
 
@@ -100,6 +102,8 @@ class TicketModel(Base):
             sla_status=self.sla_status,
             sla_contact_result=self.sla_contact_result,
             sla_contact_consumed_seconds=self.sla_contact_consumed_seconds,
+            sla_execution_result=self.sla_execution_result,
+            sla_execution_consumed_seconds=self.sla_execution_consumed_seconds,
         )
 
 

@@ -92,8 +92,16 @@ _ticket_input = ns.model("TicketInput", {
 })
 
 _assign_input = ns.model("TicketAssignInput", {
-    "assignee_id": fields.String(required=True, description="UUID del recurso"),
+    "assignee_id": fields.String(required=True, description="UUID del recurso (mode=resolver) "
+                                                             "o del usuario con rol QM (mode=pre_analysis, "
+                                                             "OBS-0052/0053)"),
     "mode": fields.String(required=True, description="resolver | pre_analysis"),
+})
+
+_qm_candidate_out = ns.model("QmCandidate", {
+    "id": fields.String(description="UUID del usuario (no del recurso — OBS-0052)"),
+    "full_name": fields.String(),
+    "active": fields.Boolean(),
 })
 
 _reassign_input = ns.model("TicketReassignInput", {
@@ -276,6 +284,10 @@ _sla_out = ns.model("TicketSla", {
     "rule_id": fields.String(allow_null=True),
     "contact_result": fields.String(allow_null=True, description="pendiente | cumplido | vencido | null"),
     "contact_consumed_seconds": fields.Integer(allow_null=True),
+    "execution_result": fields.String(allow_null=True,
+        description="OBS-0059: análogo a contact_result pero para la fase Ejecución/cierre — "
+                     "cumplido | vencido | null (null si nunca llegó a correr la fase Ejecución)"),
+    "execution_consumed_seconds": fields.Integer(allow_null=True),
 })
 
 _ticket_detail_out = ns.inherit("TicketDetail", _ticket_out, {
@@ -806,6 +818,20 @@ class TicketList(Resource):
             if parent_task_id and not is_task:
                 return {"error": "validation_error",
                         "message": "Solo una Tarea puede tener parent_task_id (Subtarea)"}, 400
+            # OBS-0045: Proyecto y Usuario/cliente pasan a ser obligatorios al crear un Ticket
+            # (no Tarea) desde perfil interno — el autoservicio (is_encargado) y las Tareas
+            # conservan el comportamiento previo (ambos opcionales). Un proyecto sin ningún
+            # contacto cargado no bloquea la creación (no dejar al usuario sin salida) — solo se
+            # exige `client_contact_id` cuando el proyecto sí tiene contactos disponibles.
+            if not is_encargado and not is_task:
+                if not project_id:
+                    return {"error": "validation_error",
+                            "message": "El campo 'project_id' es requerido"}, 400
+                _, project_contacts_total = ClientContactRepository(db).list_paginated(
+                    page=1, page_size=1, project_id=project_id)
+                if project_contacts_total > 0 and not client_contact_id:
+                    return {"error": "validation_error",
+                            "message": "El campo 'client_contact_id' es requerido"}, 400
             task_assignee_id = None
             if is_task:
                 ticket_type = data.get("ticket_type") or "incident"
@@ -1024,14 +1050,17 @@ class TicketSkills(Resource):
     @ns.response(200, "Skills requeridas actualizadas (reemplaza la lista completa)", _ticket_detail_out)
     @ns.response(400, "UUID inválido o cuerpo sin skill_ids", _error)
     @ns.response(401, "No autenticado", _error)
-    @ns.response(403, "Sin permiso tickets:edit", _error)
+    @ns.response(403, "Sin permiso tickets:manage_skills", _error)
     @ns.response(404, "Ticket no encontrado", _error)
     @ns.response(500, "Error interno del servidor", _error)
-    @require_permission("tickets", "edit")
+    @require_permission("tickets", "manage_skills")
     def patch(self, ticket_id: str):
         """Reemplaza el set completo de Skills requeridas del ticket (spec 011). Funciona en
         cualquier estado del ticket, incluidos Cerrado y Cancelado (FR-002) — no pasa por
-        `locked_fields_for`, no dispara notificación ni exige comentario (FR-006)."""
+        `locked_fields_for`, no dispara notificación ni exige comentario (FR-006).
+
+        OBS-0047/0048 (spec 033): permiso dedicado `tickets:manage_skills` (solo Coordinador)
+        en vez de `tickets:edit` — Admin/QM quedan en solo lectura para este campo."""
         uid = parse_uuid(ticket_id)
         if not uid:
             return {"error": "validation_error", "message": "ID de ticket inválido"}, 400
@@ -1044,6 +1073,30 @@ class TicketSkills(Resource):
             if not updated:
                 return {"error": "not_found", "message": "Ticket no encontrado"}, 404
             return _ticket_detail(updated, db), 200
+        except Exception:
+            return server_error()
+
+
+@ns.route("/qm-candidates")
+class TicketQmCandidates(Resource):
+    @ns.doc("qm_candidates")
+    @ns.response(200, "Usuarios con rol QM, candidatos para Pre-Análisis", [_qm_candidate_out])
+    @ns.response(401, "No autenticado", _error)
+    @ns.response(403, "Sin permiso tickets:assign", _error)
+    @ns.response(500, "Error interno del servidor", _error)
+    @require_permission("tickets", "assign")
+    def get(self):
+        """OBS-0052: candidatos para el modo "Pre-Análisis (QM)" — se listan por rol (`users`/
+        `roles`), no por la tabla `resources` (los QM no tienen perfil de recurso propio). El
+        `id` devuelto es el `user_id`; `POST /assign` con `mode=pre_analysis` lo resuelve a un
+        recurso (creándolo si hace falta, ver `ResourceRepository.get_or_create_for_user`)."""
+        try:
+            db = get_db()
+            users, _total = UserRepository(db).list_paginated(page=1, page_size=200, role="QM")
+            return [
+                {"id": str(u.id), "full_name": u.username, "active": u.active}
+                for u in users
+            ], 200
         except Exception:
             return server_error()
 
@@ -1077,8 +1130,32 @@ class TicketAssign(Resource):
             if err:
                 return err
             resource_repo = ResourceRepository(db)
-            assignee = resource_repo.get_by_id(assignee_id)
-            trigger, comment_type = _assign_svc.validate(ticket, assignee, mode)
+            # OBS-0052/0053: en mode=pre_analysis, `assignee_id` es un user_id (candidatos QM se
+            # listan por rol, no por `resources` — ver GET /qm-candidates); se resuelve/provisiona
+            # el recurso del usuario y se valida su rol antes de continuar. En mode=resolver se
+            # mantiene el comportamiento previo (assignee_id = resource_id).
+            assignee_role_name = None
+            if mode == "pre_analysis":
+                assignee_user = UserRepository(db).get_by_id(assignee_id)
+                if not assignee_user:
+                    return {"error": "not_found", "message": "Usuario no encontrado"}, 404
+                assignee_role_name = assignee_user.role.name
+                assignee = resource_repo.get_or_create_for_user(assignee_user)
+                # El recurso auto-provisionado nace `active=True`; se refleja aquí el estado
+                # real de la cuenta para que `_assign_svc.validate` rechace un QM inactivo con
+                # el mismo error "resource_inactive" que ya usa OBS-0063 para el resto de roles.
+                assignee.active = assignee_user.active
+                assignee.user_active = assignee_user.active
+            else:
+                assignee = resource_repo.get_by_id(assignee_id)
+                if assignee is not None and assignee.user_id is not None:
+                    owner = UserRepository(db).get_by_id(assignee.user_id)
+                    assignee_role_name = owner.role.name if owner else None
+            trigger, comment_type = _assign_svc.validate(ticket, assignee, mode, assignee_role_name)
+            # A partir de aquí, `assignee_id` SIEMPRE es el resource_id (para mode=pre_analysis
+            # se reemplaza el user_id recibido por el resource_id resuelto/provisionado arriba),
+            # ya que `tickets.assignee_id` es un FK a `resources.id`.
+            assignee_id = assignee.id
 
             ticket_repo = TicketRepository(db)
             open_count = ticket_repo.count_open_by_assignee(assignee_id)

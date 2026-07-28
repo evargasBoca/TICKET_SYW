@@ -37,6 +37,9 @@ export interface SlaRulePatchData {
 export type SlaPhase = 'contacto' | 'ejecucion' | 'cerrado'
 export type SlaStatus = 'sin_sla' | 'corriendo' | 'pausado' | 'vencido' | 'detenido'
 export type SlaContactResult = 'pendiente' | 'cumplido' | 'vencido'
+/** OBS-0059 (spec 033): análogo a `SlaContactResult` pero para la fase Ejecución/cierre — se
+ * congela solo al cerrar/resolver/cancelar (nunca queda en 'pendiente', a diferencia de Contacto). */
+export type SlaExecutionResult = 'cumplido' | 'vencido'
 /** Motivo de la pausa (spec 022, motor de SLA dinámico) — `null` si `status != 'pausado'`;
  * `'ticket_status'` si la pausa es por estado del ticket (comportamiento ya existente);
  * `'outside_hours' | 'holiday' | 'absence'` si es por disponibilidad real del recurso asignado. */
@@ -50,5 +53,7 @@ export interface TicketSlaState {
   rule_id: string | null
   contact_result?: SlaContactResult | null
   contact_consumed_seconds?: number | null
+  execution_result?: SlaExecutionResult | null
+  execution_consumed_seconds?: number | null
   pause_reason?: SlaPauseReason
 }

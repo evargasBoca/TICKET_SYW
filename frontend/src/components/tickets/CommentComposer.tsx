@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Button, Modal, Select, Space, Upload, message } from 'antd'
+import { App, Button, Modal, Select, Space, Upload } from 'antd'
 import { SendOutlined, UploadOutlined, ExperimentOutlined, CheckOutlined,
          CloseOutlined, StopOutlined, LockOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
-import type { CommentType, TicketDetail } from '../../types/ticket'
+import type { CommentType, TicketDetail, TicketStatus } from '../../types/ticket'
+import { STATUS_LABELS } from '../../types/ticket'
 import type { CatalogItem } from '../../types/catalog'
 import { ticketService } from '../../services/ticketService'
 import { useAuthStore } from '../../store/authStore'
@@ -19,6 +20,16 @@ const COMMENT_OPTIONS: Array<{ type: CommentType; label: string; action: string 
   { type: 'comentario_interno', label: 'Comentario interno (sin cambio de estado)', action: null },
 ]
 
+// OBS-0057: estado destino de cada comentario tipificado (espejo de ticket_fsm.py TRANSITIONS),
+// usado solo para redactar el mensaje de confirmación — no cambia la lógica de transición en sí.
+const COMMENT_DEST_STATUS: Partial<Record<CommentType, TicketStatus>> = {
+  confirmacion_atencion: 'en_analisis',
+  termina_analisis: 'en_ejecucion',
+  solicitud_informacion: 'pendiente_usuario',
+  solicitud_cierre: 'resuelto',
+  respuesta_usuario: 'en_ejecucion',
+}
+
 interface CommentComposerProps {
   ticket: TicketDetail
   resolutionTypes: CatalogItem[]
@@ -31,6 +42,9 @@ interface CommentComposerProps {
 /** Composer de comentarios tipificados + botones de acciones de estado (US3). */
 export default function CommentComposer({ ticket, resolutionTypes, onUpdated, restrictToInternal }: CommentComposerProps) {
   const { hasPermission } = useAuthStore()
+  // OBS-0056: la instancia estática `message` de 'antd' no renderiza ningún toast en esta
+  // app (mismo síntoma que OBS-0029/spec 028) — se usa la instancia ligada al `<App>` de antd.
+  const { message } = App.useApp()
   const [commentType, setCommentType] = useState<CommentType>('comentario_interno')
   const [body, setBody] = useState('')
   const [bodyKey, setBodyKey] = useState(0)
@@ -59,10 +73,12 @@ export default function CommentComposer({ ticket, resolutionTypes, onUpdated, re
     }
     setSending(true)
     try {
+      const effectiveType = restrictToInternal ? 'comentario_interno' : commentType
+      const destStatus = COMMENT_DEST_STATUS[effectiveType]
       const rawFiles = files.map(f => f.originFileObj).filter((f): f is NonNullable<typeof f> => !!f)
-      await ticketService.addComment(ticket.id, restrictToInternal ? 'comentario_interno' : commentType, body, rawFiles, pendingImages)
+      await ticketService.addComment(ticket.id, effectiveType, body, rawFiles, pendingImages)
       setBody(''); setBodyKey(k => k + 1); setPendingImages([]); setFiles([]); setCommentType('comentario_interno')
-      message.success('Comentario registrado')
+      message.success(destStatus ? `Ticket movido a "${STATUS_LABELS[destStatus]}"` : 'Comentario registrado')
       onUpdated()
     } catch (err: unknown) {
       message.error(apiError(err, 'Error al registrar el comentario'))

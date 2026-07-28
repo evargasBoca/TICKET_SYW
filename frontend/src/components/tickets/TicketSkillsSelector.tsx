@@ -9,7 +9,8 @@ import { palette } from '../../theme'
 interface TicketSkillsSelectorProps {
   ticketId: string
   skills: TicketSkillRef[]
-  /** Habilita edición (rol con `tickets:edit`). Sin importar `ticket.status` (spec 011 FR-002) —
+  /** Habilita edición (rol con `tickets:manage_skills`, OBS-0047/0048 spec 033 — antes `tickets:edit`).
+   * Sin importar `ticket.status` (spec 011 FR-002) —
    * a diferencia de otros campos de clasificación, este selector nunca se deshabilita por
    * estado. */
   editable: boolean

@@ -103,6 +103,19 @@ class ResourceRepository:
         model = self._db.query(ResourceModel).filter(ResourceModel.user_id == user_id).first()
         return model.to_entity() if model else None
 
+    def get_or_create_for_user(self, user) -> Resource:
+        """OBS-0052/0053: provisiona un `Resource` mínimo (sin skills/calendario) para un
+        usuario sin perfil de recurso —hoy los QM— al momento de asignarle un ticket a
+        Pre-Análisis. `tickets.assignee_id` es un FK obligatorio a `resources.id`; esto evita
+        exigirle a un Admin dar de alta manualmente un recurso completo solo para poder asignar
+        tickets a QM (decisión de producto: candidatos QM se listan por rol, no por la tabla de
+        recursos)."""
+        existing = self.get_by_user_id(user.id)
+        if existing:
+            return existing
+        resource = Resource(id=uuid.uuid4(), user_id=user.id, full_name=user.username, email=user.email)
+        return self.create(resource)
+
     def get_by_email(self, email: str) -> Optional[Resource]:
         model = self._db.query(ResourceModel).filter(ResourceModel.email == email).first()
         return model.to_entity() if model else None

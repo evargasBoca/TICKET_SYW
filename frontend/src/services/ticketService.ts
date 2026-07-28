@@ -5,6 +5,13 @@ import type {
   TicketReassignment,
 } from '../types/ticket'
 
+/** OBS-0052: candidato para "Pre-Análisis (QM)" — `id` es un user_id, no un resource_id. */
+export interface QmCandidate {
+  id: string
+  full_name: string
+  active: boolean
+}
+
 function buildParams(filters: TicketFilters): URLSearchParams {
   const params = new URLSearchParams()
   const { status, ...rest } = filters
@@ -50,6 +57,12 @@ export const ticketService = {
   assign: (id: string, assignee_id: string, mode: 'resolver' | 'pre_analysis') =>
     apiClient.post<{ ticket: TicketDetail; assignment: { id: string } }>(
       `/api/tickets/${id}/assign`, { assignee_id, mode }).then(r => r.data),
+
+  /** OBS-0052: candidatos para "Pre-Análisis (QM)" — por rol (`users`), no por la tabla de
+   * recursos (los QM no tienen perfil de recurso propio). El `id` devuelto es un user_id, se usa
+   * tal cual como `assignee_id` de `assign(..., mode: 'pre_analysis')`. */
+  qmCandidates: () =>
+    apiClient.get<QmCandidate[]>('/api/tickets/qm-candidates').then(r => r.data),
 
   /** Reasignación de resolutor (spec 023) — corrige errores de asignación o escala por
    * complejidad, sin cambiar el estado del ticket. */

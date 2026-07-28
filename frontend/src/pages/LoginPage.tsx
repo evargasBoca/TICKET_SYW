@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Divider, Form, Input, Modal, message } from 'antd'
+import { App, Button, Divider, Form, Input, Modal } from 'antd'
 import { GoogleOutlined, LockOutlined, MailOutlined, UserOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
@@ -14,6 +14,9 @@ interface LoginFormValues {
 export default function LoginPage() {
   const navigate = useNavigate()
   const { setAuth, isAuthenticated } = useAuthStore()
+  // OBS-0044: la instancia estática `message` de 'antd' no renderiza ningún toast en esta
+  // app (mismo síntoma que OBS-0029/spec 028) — se usa la instancia ligada al `<App>` de antd.
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
   const [forgotLoading, setForgotLoading] = useState(false)
@@ -44,8 +47,12 @@ export default function LoginPage() {
       setAuth(access_token, user)
       navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? 'Usuario o contraseña incorrectos'
-      message.error(msg)
+      const response = (err as { response?: { data?: { message?: string } } }).response
+      if (!response) {
+        message.error('No se pudo conectar, intenta de nuevo')
+      } else {
+        message.error(response.data?.message ?? 'Usuario o contraseña incorrectos')
+      }
     } finally {
       setLoading(false)
     }

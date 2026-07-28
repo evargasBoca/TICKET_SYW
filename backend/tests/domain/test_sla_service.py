@@ -140,6 +140,39 @@ def test_transition_to_cerrado_stops_and_freezes():
     assert updates["sla_last_resume_at"] is None
 
 
+def test_transition_to_resuelto_freezes_execution_result_cumplido():
+    """OBS-0059 (spec 033): análogo a Contacto, pero para Ejecución — se congela al cerrar."""
+    ticket = _ticket(
+        status="en_pruebas", sla_phase="ejecucion", sla_phase_limit_minutes=480,
+        sla_consumed_seconds=0, sla_last_resume_at=NOW - timedelta(minutes=100), sla_status="corriendo",
+    )
+    updates = sla_service.apply_transition(ticket, "resuelto", NOW, _FakeSlaRuleRepo({}))
+    assert updates["sla_phase"] == "cerrado"
+    assert updates["sla_execution_result"] == "cumplido"  # 100 min < 480 min límite
+    assert updates["sla_execution_consumed_seconds"] == 6000
+
+
+def test_transition_to_cerrado_marks_execution_vencido_if_over_limit():
+    ticket = _ticket(
+        status="en_pruebas", sla_phase="ejecucion", sla_phase_limit_minutes=480,
+        sla_consumed_seconds=0, sla_last_resume_at=NOW - timedelta(minutes=500), sla_status="vencido",
+    )
+    updates = sla_service.apply_transition(ticket, "cerrado", NOW, _FakeSlaRuleRepo({}))
+    assert updates["sla_execution_result"] == "vencido"
+
+
+def test_transition_to_cancelado_from_contacto_leaves_execution_result_none():
+    """Si el ticket se cancela sin haber llegado nunca a la fase Ejecución, no aplica
+    sla_execution_result (queda ausente del dict, no se sobre-escribe con un valor falso)."""
+    ticket = _ticket(
+        status="nuevo", sla_phase="contacto", sla_phase_limit_minutes=15,
+        sla_consumed_seconds=0, sla_last_resume_at=NOW - timedelta(minutes=5), sla_status="corriendo",
+    )
+    updates = sla_service.apply_transition(ticket, "cancelado", NOW, _FakeSlaRuleRepo({}))
+    assert updates["sla_phase"] == "cerrado"
+    assert "sla_execution_result" not in updates
+
+
 def test_transition_reopen_from_resuelto_resumes_ejecucion_phase():
     """reject_resolution: resuelto -> en_ejecucion. sla_phase quedó en 'cerrado' al llegar a
     resuelto; debe recuperar 'ejecucion' y seguir sumando desde el consumo ya acumulado."""

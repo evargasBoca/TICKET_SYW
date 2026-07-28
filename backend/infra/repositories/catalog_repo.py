@@ -3,7 +3,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from backend.infra.models.catalog_model import CATALOG_MODELS
+from backend.infra.models.catalog_model import CATALOG_MODELS, tool_processes_table
 
 
 class CatalogRepository:
@@ -49,3 +49,36 @@ class CatalogRepository:
         model.active = active
         self._db.commit()
         return model.to_dict()
+
+
+class ToolProcessRepository:
+    """Vínculos sugeridos Herramienta↔Proceso (OBS-0049) — tabla puente `tool_processes`."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def list_all(self) -> list[dict]:
+        rows = self._db.execute(tool_processes_table.select()).all()
+        return [{"tool_id": str(r.tool_id), "process_id": str(r.process_id)} for r in rows]
+
+    def link(self, tool_id: uuid.UUID, process_id: uuid.UUID) -> dict:
+        exists = self._db.execute(
+            tool_processes_table.select().where(
+                tool_processes_table.c.tool_id == tool_id,
+                tool_processes_table.c.process_id == process_id,
+            )
+        ).first()
+        if not exists:
+            self._db.execute(tool_processes_table.insert().values(tool_id=tool_id, process_id=process_id))
+            self._db.commit()
+        return {"tool_id": str(tool_id), "process_id": str(process_id)}
+
+    def unlink(self, tool_id: uuid.UUID, process_id: uuid.UUID) -> bool:
+        result = self._db.execute(
+            tool_processes_table.delete().where(
+                tool_processes_table.c.tool_id == tool_id,
+                tool_processes_table.c.process_id == process_id,
+            )
+        )
+        self._db.commit()
+        return result.rowcount > 0

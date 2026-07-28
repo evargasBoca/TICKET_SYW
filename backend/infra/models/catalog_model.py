@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Boolean, Column, SmallInteger, Text, TIMESTAMP
+from sqlalchemy import Boolean, Column, ForeignKey, SmallInteger, Table, Text, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func, text
 from backend.infra.models import Base
@@ -54,6 +54,18 @@ class AccessTypeCatalogModel(_CatalogMixin, Base):
 
     def to_dict(self) -> dict:
         return {**super().to_dict(), "color_index": self.color_index}
+
+
+tool_processes_table = Table(
+    "tool_processes",
+    Base.metadata,
+    Column("tool_id", UUID(as_uuid=True), ForeignKey("catalog_tools.id"), primary_key=True),
+    Column("process_id", UUID(as_uuid=True), ForeignKey("catalog_processes.id"), primary_key=True),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+)
+"""OBS-0049: vínculos sugeridos Herramienta↔Proceso (M:N, administrable desde Catálogos). Guía al
+elegir Proceso en el formulario de ticket una vez elegida la Herramienta — no es una restricción
+dura, cualquier combinación sigue siendo válida (research.md, decisión del usuario)."""
 
 
 CATALOG_MODELS = {
