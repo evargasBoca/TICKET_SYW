@@ -1,4 +1,4 @@
-"""NotificationService — evento 'reassigned' y mensaje enriquecido (OBS-0046)."""
+"""NotificationService — evento 'reassigned' y mensaje enriquecido (OBS-0062)."""
 import uuid
 
 from backend.domain.services.notification_service import NotificationService

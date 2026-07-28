@@ -15,7 +15,7 @@ _MESSAGES = {
     "sla_breached": "El ticket {number} incumplió su tiempo límite de SLA",
 }
 
-# Eventos que llevan el detalle adicional del ticket (OBS-0046, FR-008): cliente, prioridad,
+# Eventos que llevan el detalle adicional del ticket (OBS-0062, FR-008): cliente, prioridad,
 # estado y quién realizó la (re)asignación — el resto de eventos no lo necesita.
 _ASSIGNMENT_EVENTS = ("assigned", "reassigned")
 

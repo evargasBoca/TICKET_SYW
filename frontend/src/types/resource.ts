@@ -18,7 +18,7 @@ export interface Resource {
   full_name: string
   email: string
   active: boolean
-  /** Estado de la cuenta de usuario vinculada (null si no hay user_id). OBS-0047. */
+  /** Estado de la cuenta de usuario vinculada (null si no hay user_id). OBS-0063. */
   user_active: boolean | null
   notes: string | null
   identification: string | null

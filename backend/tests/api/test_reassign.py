@@ -70,7 +70,7 @@ def test_reassign_without_permission_is_403(client, make_ticket, ticket_resource
 
 def _second_resource_with_user(client, unique_name, db_session):
     """Segundo resolutor CON cuenta de usuario vinculada (a diferencia de `_second_resource`),
-    necesario para probar notificaciones (OBS-0046) y bloqueo por cuenta inactiva (OBS-0047)."""
+    necesario para probar notificaciones (OBS-0062) y bloqueo por cuenta inactiva (OBS-0063)."""
     import uuid as _uuid
     from backend.domain.entities.user import User
     from backend.infra.repositories.role_repo import RoleRepository
@@ -90,7 +90,7 @@ def _second_resource_with_user(client, unique_name, db_session):
 
 def test_reassign_notifies_new_assignee(client, make_ticket, ticket_resource, unique_name,
                                         db_session):
-    """OBS-0046: reasignar dispara una notificación 'reassigned' para el nuevo resolutor."""
+    """OBS-0062: reasignar dispara una notificación 'reassigned' para el nuevo resolutor."""
     ticket = make_ticket()
     client.post(f"/api/tickets/{ticket['id']}/assign",
                json={"assignee_id": ticket_resource["id"], "mode": "resolver"})
@@ -111,7 +111,7 @@ def test_reassign_notifies_new_assignee(client, make_ticket, ticket_resource, un
 
 def test_reassign_to_resource_with_inactive_user_account_is_rejected(
         client, make_ticket, ticket_resource, unique_name, db_session):
-    """OBS-0047: Resource.active=True pero su cuenta de usuario está desactivada."""
+    """OBS-0063: Resource.active=True pero su cuenta de usuario está desactivada."""
     ticket = make_ticket()
     client.post(f"/api/tickets/{ticket['id']}/assign",
                json={"assignee_id": ticket_resource["id"], "mode": "resolver"})

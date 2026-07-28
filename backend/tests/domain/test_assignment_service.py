@@ -1,4 +1,4 @@
-"""Triage Push (US2) — dominio puro, sin DB. OBS-0047: cuenta de usuario vinculada inactiva."""
+"""Triage Push (US2) — dominio puro, sin DB. OBS-0063: cuenta de usuario vinculada inactiva."""
 import uuid
 
 import pytest
@@ -32,7 +32,7 @@ def test_validate_rejects_inactive_resource():
 
 
 def test_validate_rejects_resource_with_inactive_linked_user_account():
-    """OBS-0047: Resource.active=True pero la cuenta de usuario vinculada está inactiva."""
+    """OBS-0063: Resource.active=True pero la cuenta de usuario vinculada está inactiva."""
     ticket = _ticket()
     with pytest.raises(AssignmentError) as exc:
         AssignmentService().validate(

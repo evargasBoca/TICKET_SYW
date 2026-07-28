@@ -33,7 +33,7 @@ class Resource:
     email: str
     active: bool = True
     user_id: Optional[uuid.UUID] = None
-    # OBS-0047: estado de la cuenta de acceso vinculada (`users.active`), resuelto por el
+    # OBS-0063: estado de la cuenta de acceso vinculada (`users.active`), resuelto por el
     # repositorio al cargar el recurso — `None` cuando no hay `user_id`. No es una columna
     # propia de `resources`; distinto de `active` (estado del recurso como recurso de RRHH).
     user_active: Optional[bool] = None

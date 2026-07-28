@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Cierre de OBS-0044–OBS-0047 (Backlog UAT ITER-008)
+# Specification Quality Checklist: Cierre de OBS-0060–OBS-0063 (Backlog UAT ITER-009)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-07-28
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Las 4 observaciones (OBS-0044 a OBS-0047) ya traían criterios de aceptación redactados por el consultor UAT en `UAT/01_Iterations/ITER-008/ITER-008.md`; se usaron como base directa para los Acceptance Scenarios y Functional Requirements de esta especificación, sin necesidad de marcadores [NEEDS CLARIFICATION].
+- Las 4 observaciones (OBS-0060 a OBS-0063) ya traían criterios de aceptación redactados por el consultor UAT en `UAT/01_Iterations/ITER-009/ITER-009.md`; se usaron como base directa para los Acceptance Scenarios y Functional Requirements de esta especificación, sin necesidad de marcadores [NEEDS CLARIFICATION].
 - Todos los ítems pasan en la primera iteración de validación. Listo para `/speckit-plan`.

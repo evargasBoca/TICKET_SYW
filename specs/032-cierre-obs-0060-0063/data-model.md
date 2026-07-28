@@ -1,4 +1,4 @@
-# Data Model: Cierre de OBS-0044–OBS-0047 (ITER-008)
+# Data Model: Cierre de OBS-0060–OBS-0063 (ITER-009)
 
 Ninguna de las 4 observaciones requiere una migración de Alembic ni columnas nuevas. Todos los campos usados ya existen; este documento detalla cómo se usan/relacionan para esta corrección.
 
@@ -25,9 +25,9 @@ Ninguna de las 4 observaciones requiere una migración de Alembic ni columnas nu
 
 | Regla | Origen | Dónde se aplica |
 |---|---|---|
-| Hora mostrada = hora ingresada (conversión a timezone local del navegador, no slicing de string UTC) | OBS-0044 / FR-001, FR-002 | `TimeLogModal.tsx`, `WorkSessionForm.tsx` (frontend, presentación) |
-| Etiqueta "Fuera de jornada" no se superpone al horario | OBS-0045 / FR-003, FR-004 | `TimeLogModal.tsx` (frontend, layout de columnas) |
-| Notificación `"reassigned"` con datos mínimos al reasignar | OBS-0046 / FR-006 a FR-009 | `TicketReassign` (backend, `tickets.py`), `NotificationService` |
-| Notificación dirige al detalle del ticket | OBS-0046 / FR-010 | Frontend, componente del centro de notificaciones (ya soportado vía `ticket_id`) |
-| Rechazar asignación/reasignación si `Resource.active = false` **o** `User.active = false` (cuenta vinculada) | OBS-0047 / FR-011 a FR-013 | `AssignmentService.validate`, `ReassignmentService.validate` (backend); `useResourceCandidates`/filtro de selector (frontend) |
-| Asignaciones existentes de un usuario que luego pasa a Inactivo no se alteran retroactivamente | OBS-0047 / FR-014 | Sin cambio de comportamiento — no hay job/trigger que reaccione a la desactivación |
+| Hora mostrada = hora ingresada (conversión a timezone local del navegador, no slicing de string UTC) | OBS-0060 / FR-001, FR-002 | `TimeLogModal.tsx`, `WorkSessionForm.tsx` (frontend, presentación) |
+| Etiqueta "Fuera de jornada" no se superpone al horario | OBS-0061 / FR-003, FR-004 | `TimeLogModal.tsx` (frontend, layout de columnas) |
+| Notificación `"reassigned"` con datos mínimos al reasignar | OBS-0062 / FR-006 a FR-009 | `TicketReassign` (backend, `tickets.py`), `NotificationService` |
+| Notificación dirige al detalle del ticket | OBS-0062 / FR-010 | Frontend, componente del centro de notificaciones (ya soportado vía `ticket_id`) |
+| Rechazar asignación/reasignación si `Resource.active = false` **o** `User.active = false` (cuenta vinculada) | OBS-0063 / FR-011 a FR-013 | `AssignmentService.validate`, `ReassignmentService.validate` (backend); `useResourceCandidates`/filtro de selector (frontend) |
+| Asignaciones existentes de un usuario que luego pasa a Inactivo no se alteran retroactivamente | OBS-0063 / FR-014 | Sin cambio de comportamiento — no hay job/trigger que reaccione a la desactivación |
