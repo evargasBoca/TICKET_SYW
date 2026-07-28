@@ -27,6 +27,14 @@ function errorMessage(err: unknown, fallback: string): string {
   return (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? fallback
 }
 
+function errorCode(err: unknown): string | undefined {
+  // El contrato estandar (spec 013, backend/api/errors.py) siempre entrega `code` en
+  // MAYUSCULAS ("NO_RESOURCE_PROFILE") — se normaliza a minuscula para comparar contra el
+  // código de dominio original (ej. "no_resource_profile").
+  const data = (err as { response?: { data?: { code?: string; error?: string } } }).response?.data
+  return (data?.code ?? data?.error)?.toLowerCase()
+}
+
 /** Cronómetro manual de tiempo (spec 012, provisional): iniciar/pausar/reanudar/terminar,
  * personal por recurso — solo ve y controla el suyo (FR-005). El tiempo mostrado se deriva de
  * `total_seconds` recibido del servidor en el último fetch más lo transcurrido localmente
@@ -38,6 +46,7 @@ export default function TicketTimerWidget({ ticketId, ticketStatus, onFinished }
   const [finishOpen, setFinishOpen] = useState(false)
   const [note, setNote] = useState('')
   const [displaySeconds, setDisplaySeconds] = useState(0)
+  const [noResourceProfile, setNoResourceProfile] = useState(false)
   const fetchedAtRef = useRef<number>(Date.now())
 
   const load = useCallback(async () => {
@@ -47,6 +56,12 @@ export default function TicketTimerWidget({ ticketId, ticketStatus, onFinished }
       setTimer(current)
       setDisplaySeconds(current.total_seconds)
       fetchedAtRef.current = Date.now()
+    } catch (err) {
+      // OBS-0050/OBS-0054: un usuario sin perfil de recurso (Admin/Coordinador/QM) no debe ver
+      // ningún error — el cronómetro es personal de quien registra tiempo, se oculta sin más.
+      if (errorCode(err) === 'no_resource_profile') {
+        setNoResourceProfile(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -101,6 +116,7 @@ export default function TicketTimerWidget({ ticketId, ticketStatus, onFinished }
     }
   }
 
+  if (noResourceProfile) return null
   if (loading && !timer) return null
 
   return (

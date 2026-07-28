@@ -3,7 +3,10 @@ import { PRIORITY_LABELS, type Priority } from '../../types/ticket'
 
 const SHORT: Record<Priority, string> = { critical: 'P1', high: 'P2', medium: 'P3', low: 'P4' }
 
-/** Badge sólido de prioridad (p1..p4), estilo docs/PROPUESTA_VISUAL.html. */
+/** Badge sólido de prioridad, estilo docs/PROPUESTA_VISUAL.html. OBS-0058: muestra el nombre
+ * legible (Crítica/Alta/Media/Baja) por defecto — antes mostraba solo el código corto ("P3") en
+ * los listados, inconsistente con el filtro y el formulario, que ya usan la palabra. `full`
+ * agrega el código antepuesto ("P3 · Media") para el detalle del ticket. */
 export default function PriorityBadge({ priority, full = false }: { priority: Priority; full?: boolean }) {
   const chip = PRIORITY_CHIP[priority]
   return (
@@ -14,7 +17,7 @@ export default function PriorityBadge({ priority, full = false }: { priority: Pr
         background: chip.bg, color: chip.text,
       }}
     >
-      {SHORT[priority]}{full ? ` · ${PRIORITY_LABELS[priority]}` : ''}
+      {full ? `${SHORT[priority]} · ${PRIORITY_LABELS[priority]}` : PRIORITY_LABELS[priority]}
     </span>
   )
 }

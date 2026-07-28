@@ -23,3 +23,9 @@ export const CATALOG_LABELS: Record<CatalogName, string> = {
 export const CATALOG_COLOR_PALETTE = [
   '#2d5fa0', '#7a4fa3', '#a06a1f', '#3f8f5a', '#a34a63', '#1f7a6c', '#55608c', '#b0524a',
 ]
+
+/** Vínculo sugerido Herramienta↔Proceso (OBS-0049) — guía no restrictiva, no un catálogo. */
+export interface ToolProcessLink {
+  tool_id: string
+  process_id: string
+}

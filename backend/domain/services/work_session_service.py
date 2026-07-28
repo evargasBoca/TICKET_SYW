@@ -28,8 +28,15 @@ class WorkSessionService:
             raise WorkSessionValidationError(
                 "invalid_duration", "La duración debe ser mayor a 0 minutos")
 
-    def validate_not_future(self, work_date: date) -> None:
-        if work_date > date.today():
+    def validate_not_future(self, work_date: date, resource=None) -> None:
+        # OBS-0055: antes comparaba siempre contra `date.today()` (fecha LOCAL DEL SERVIDOR,
+        # `TZ=America/Bogota`), mientras `work_date` se calcula con la hora local del RECURSO
+        # (`sla_service.resource_local_now`, cae a UTC sin `calendar_country` — ver OBS-0036).
+        # Entre las ~19:00 y medianoche hora Bogotá, UTC ya había avanzado al día siguiente:
+        # `work_date` (UTC) > `date.today()` (Bogotá) disparaba un falso "fecha futura". Ahora se
+        # compara contra la misma base horaria con la que se calculó `work_date`.
+        today = sla_service.resource_local_now(resource).date() if resource else date.today()
+        if work_date > today:
             raise WorkSessionValidationError(
                 "future_date", "No se puede registrar tiempo con fecha futura")
 
@@ -107,7 +114,7 @@ class WorkSessionService:
         resolved_duration = self.resolve_duration(
             started_at=started_at, ended_at=ended_at, duration_minutes=duration_minutes)
         self.validate_duration(resolved_duration)
-        self.validate_not_future(work_date)
+        self.validate_not_future(work_date, resource=resource)
         self.assert_ticket_ownership(resource_id, ticket, tickets_repo, allow_any,
                                      is_task=is_task, resources_repo=resources_repo)
         self.assert_ticket_open_or_admin(ticket, allow_any)

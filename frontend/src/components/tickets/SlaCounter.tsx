@@ -32,6 +32,9 @@ const CONTACT_RESULT_LABELS: Record<string, string> = {
   pendiente: 'Pendiente', cumplido: 'Cumplido', vencido: 'Vencido',
 }
 
+/** OBS-0059 (spec 033): mismas etiquetas que Contacto, reutilizadas para Ejecución. */
+const EXECUTION_RESULT_LABELS: Record<string, string> = CONTACT_RESULT_LABELS
+
 function formatDuration(totalSeconds: number): string {
   const totalMinutes = Math.floor(totalSeconds / 60)
   const h = Math.floor(totalMinutes / 60)
@@ -102,6 +105,12 @@ export default function SlaCounter({ sla, hasAssignee = true }: SlaCounterProps)
           <>
             {' · '}Contacto: <strong>{CONTACT_RESULT_LABELS[sla.contact_result]}</strong>
             {sla.contact_consumed_seconds != null && ` (${formatDuration(sla.contact_consumed_seconds)})`}
+          </>
+        )}
+        {sla.execution_result && (
+          <>
+            {' · '}Ejecución: <strong>{EXECUTION_RESULT_LABELS[sla.execution_result]}</strong>
+            {sla.execution_consumed_seconds != null && ` (${formatDuration(sla.execution_consumed_seconds)})`}
           </>
         )}
       </div>

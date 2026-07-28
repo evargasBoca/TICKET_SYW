@@ -94,6 +94,10 @@ class Ticket:
     sla_status: str = "sin_sla"
     sla_contact_result: Optional[str] = None
     sla_contact_consumed_seconds: Optional[int] = None
+    # OBS-0059 (spec 033): análogo a Contacto, pero para la fase de Ejecución/cierre —
+    # se congela al cerrar/resolver/cancelar el ticket si esa fase llegó a correr.
+    sla_execution_result: Optional[str] = None
+    sla_execution_consumed_seconds: Optional[int] = None
 
     @property
     def number_display(self) -> str:

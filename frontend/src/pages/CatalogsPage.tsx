@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Card, Col, Form, Input, Row, Table, Tooltip, message } from 'antd'
-import { PlusOutlined, StopOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { Button, Card, Col, Form, Input, Row, Select, Space, Table, Tooltip, message } from 'antd'
+import { PlusOutlined, StopOutlined, PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { catalogService } from '../services/catalogService'
-import type { CatalogItem, CatalogName } from '../types/catalog'
+import type { CatalogItem, CatalogName, ToolProcessLink } from '../types/catalog'
 import { CATALOG_LABELS, CATALOG_COLOR_PALETTE } from '../types/catalog'
 import StatusTag from '../components/common/StatusTag'
 import { clientColumnFilter, clientTextColumnFilter } from '../components/common/columnFilters'
@@ -104,14 +104,107 @@ function CatalogCard({ catalog }: { catalog: CatalogName }) {
   )
 }
 
+/** OBS-0049: vínculos sugeridos Herramienta↔Proceso — guía no restrictiva para el selector de
+ * Proceso en el formulario de ticket una vez elegida la Herramienta (no bloquea otras combinaciones). */
+function ToolProcessLinksCard() {
+  const { hasPermission } = useAuthStore()
+  const canCreate = hasPermission('catalogs', 'create')
+  const canDeactivate = hasPermission('catalogs', 'deactivate')
+  const [tools, setTools] = useState<CatalogItem[]>([])
+  const [processes, setProcesses] = useState<CatalogItem[]>([])
+  const [links, setLinks] = useState<ToolProcessLink[]>([])
+  const [loading, setLoading] = useState(false)
+  const [form] = Form.useForm<{ tool_id: string; process_id: string }>()
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [toolsRes, processesRes, linksRes] = await Promise.all([
+        catalogService.list('tools', 'true'),
+        catalogService.list('processes', 'true'),
+        catalogService.listToolProcesses(),
+      ])
+      setTools(toolsRes.items)
+      setProcesses(processesRes.items)
+      setLinks(linksRes.items)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const nameOf = (items: CatalogItem[], id: string) => items.find(i => i.id === id)?.name ?? id
+
+  const handleLink = async ({ tool_id, process_id }: { tool_id: string; process_id: string }) => {
+    try {
+      await catalogService.linkToolProcess(tool_id, process_id)
+      form.resetFields()
+      load()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        ?? 'Error al crear el vínculo'
+      message.error(msg)
+    }
+  }
+
+  const handleUnlink = async (link: ToolProcessLink) => {
+    try {
+      await catalogService.unlinkToolProcess(link.tool_id, link.process_id)
+      load()
+    } catch {
+      message.error('No se pudo quitar el vínculo')
+    }
+  }
+
+  return (
+    <Card title="Vínculos Herramienta ↔ Proceso" size="small">
+      <Table
+        rowKey={r => `${r.tool_id}:${r.process_id}`} size="small" loading={loading}
+        dataSource={links} pagination={false}
+        columns={[
+          { title: 'Herramienta', dataIndex: 'tool_id', render: (v: string) => nameOf(tools, v) },
+          { title: 'Proceso', dataIndex: 'process_id', render: (v: string) => nameOf(processes, v) },
+          ...(canDeactivate ? [{
+            title: '', key: 'remove', width: 60,
+            render: (_: unknown, link: ToolProcessLink) => (
+              <Tooltip title="Quitar vínculo">
+                <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleUnlink(link)} />
+              </Tooltip>
+            ),
+          }] : []),
+        ]}
+      />
+      {canCreate && (
+        <Form form={form} layout="inline" onFinish={handleLink} style={{ marginTop: 8 }}>
+          <Form.Item name="tool_id" rules={[{ required: true, message: 'Herramienta requerida' }]}>
+            <Select placeholder="Herramienta" style={{ width: 180 }}
+              options={tools.map(t => ({ value: t.id, label: t.name }))} />
+          </Form.Item>
+          <Form.Item name="process_id" rules={[{ required: true, message: 'Proceso requerido' }]}>
+            <Select placeholder="Proceso" style={{ width: 180 }}
+              options={processes.map(p => ({ value: p.id, label: p.name }))} />
+          </Form.Item>
+          <Form.Item>
+            <Button htmlType="submit" icon={<PlusOutlined />}>Vincular</Button>
+          </Form.Item>
+        </Form>
+      )}
+    </Card>
+  )
+}
+
 export default function CatalogsPage() {
   return (
-    <Row gutter={[16, 16]}>
-      {CATALOGS.map(c => (
-        <Col key={c} xs={24} lg={8}>
-          <CatalogCard catalog={c} />
-        </Col>
-      ))}
-    </Row>
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Row gutter={[16, 16]}>
+        {CATALOGS.map(c => (
+          <Col key={c} xs={24} lg={8}>
+            <CatalogCard catalog={c} />
+          </Col>
+        ))}
+      </Row>
+      <ToolProcessLinksCard />
+    </Space>
   )
 }
