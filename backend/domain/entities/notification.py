@@ -3,7 +3,7 @@ from datetime import datetime
 import uuid
 
 EVENT_TYPES = (
-    "assigned", "user_replied", "resolution_rejected", "closed", "close_eligible",
+    "assigned", "reassigned", "user_replied", "resolution_rejected", "closed", "close_eligible",
 )
 
 

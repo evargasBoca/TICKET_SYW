@@ -66,3 +66,60 @@ def test_reassign_without_permission_is_403(client, make_ticket, ticket_resource
                                 json={"assignee_id": ticket_resource["id"]},
                                 headers=resolver_auth)
     assert response.status_code == 403
+
+
+def _second_resource_with_user(client, unique_name, db_session):
+    """Segundo resolutor CON cuenta de usuario vinculada (a diferencia de `_second_resource`),
+    necesario para probar notificaciones (OBS-0062) y bloqueo por cuenta inactiva (OBS-0063)."""
+    import uuid as _uuid
+    from backend.domain.entities.user import User
+    from backend.infra.repositories.role_repo import RoleRepository
+    from backend.infra.repositories.user_repo import UserRepository
+    resolutor_role = RoleRepository(db_session).get_by_name("Resolutor")
+    user = User(id=_uuid.uuid4(), email=f"segundo.notif.{unique_name}@sywork.net",
+               username=f"segundo_notif_{unique_name}", role=resolutor_role, active=True)
+    created_user = UserRepository(db_session).create(user)
+    response = client.post("/api/resources", json={
+        "full_name": f"Segundo Resolutor Notif {unique_name}",
+        "email": f"segundo.notif.res.{unique_name}@sywork.net",
+        "user_id": str(created_user.id),
+    })
+    assert response.status_code == 201, response.get_json()
+    return response.get_json(), created_user
+
+
+def test_reassign_notifies_new_assignee(client, make_ticket, ticket_resource, unique_name,
+                                        db_session):
+    """OBS-0062: reasignar dispara una notificación 'reassigned' para el nuevo resolutor."""
+    ticket = make_ticket()
+    client.post(f"/api/tickets/{ticket['id']}/assign",
+               json={"assignee_id": ticket_resource["id"], "mode": "resolver"})
+    second, second_user = _second_resource_with_user(client, unique_name, db_session)
+
+    response = _reassign(client, ticket["id"], second["id"])
+    assert response.status_code == 200, response.get_json()
+
+    from flask_jwt_extended import create_access_token
+    with client.application.app_context():
+        token = create_access_token(identity=str(second_user.id))
+    notifs = client.get("/api/notifications", headers={"Authorization": f"Bearer {token}"})
+    assert notifs.status_code == 200, notifs.get_json()
+    items = notifs.get_json()["items"]
+    assert any(n["event_type"] == "reassigned" and n["ticket"]["id"] == ticket["id"]
+              for n in items)
+
+
+def test_reassign_to_resource_with_inactive_user_account_is_rejected(
+        client, make_ticket, ticket_resource, unique_name, db_session):
+    """OBS-0063: Resource.active=True pero su cuenta de usuario está desactivada."""
+    ticket = make_ticket()
+    client.post(f"/api/tickets/{ticket['id']}/assign",
+               json={"assignee_id": ticket_resource["id"], "mode": "resolver"})
+    second, second_user = _second_resource_with_user(client, unique_name, db_session)
+
+    deactivate = client.patch(f"/api/users/{second_user.id}/deactivate")
+    assert deactivate.status_code == 200, deactivate.get_json()
+
+    response = _reassign(client, ticket["id"], second["id"])
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "resource_inactive"

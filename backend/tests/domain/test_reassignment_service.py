@@ -55,6 +55,22 @@ def test_validate_rejects_inactive_resource():
     assert exc.value.code == "resource_inactive"
 
 
+def test_validate_rejects_resource_with_inactive_linked_user_account():
+    """OBS-0063: Resource.active=True pero la cuenta de usuario vinculada está inactiva."""
+    ticket = _ticket()
+    with pytest.raises(ReassignmentError) as exc:
+        ReassignmentService().validate(
+            ticket, _resource(user_id=uuid.uuid4(), user_active=False))
+    assert exc.value.code == "resource_inactive"
+
+
+def test_validate_accepts_resource_without_linked_user():
+    """Un recurso sin cuenta vinculada (user_id=None) no se ve afectado por la regla nueva."""
+    ticket = _ticket()
+    missing = ReassignmentService().validate(ticket, _resource(user_id=None, user_active=None))
+    assert missing == []
+
+
 def test_validate_rejects_terminal_ticket_status():
     ticket = _ticket(status="cerrado")
     with pytest.raises(ReassignmentError) as exc:

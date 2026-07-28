@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Form, Input, InputNumber, Modal, Segmented, Select, Space, message } from 'antd'
+import { format, parseISO } from 'date-fns'
 import type { TicketListItem } from '../../types/ticket'
 import type { WorkSessionListItem } from '../../types/workSession'
 import { workSessionService } from '../../services/workSessionService'
@@ -33,7 +34,7 @@ function todayIso(): string {
 }
 
 function timeOf(iso: string | null): string | undefined {
-  return iso ? iso.slice(11, 16) : undefined
+  return iso ? format(parseISO(iso), 'HH:mm') : undefined
 }
 
 /** Combina fecha (YYYY-MM-DD) + hora (HH:mm) en un ISO-8601 con la zona horaria del navegador. */
