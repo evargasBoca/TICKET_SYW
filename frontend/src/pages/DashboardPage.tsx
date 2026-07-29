@@ -3,7 +3,7 @@ import { LogoutOutlined } from '@ant-design/icons'
 import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { palette, roleColor, avatarColor, initials } from '../theme'
-import { getVisibleNavItems, getVisibleTicketNavItems, getVisibleWorkSessionNavItems, getVisibleRrhhNavItems, maestrosGroupIcon, MAESTROS_GROUP_KEY, rrhhGroupIcon, RRHH_GROUP_KEY } from '../config/navigation'
+import { getVisibleNavItems, getVisibleTicketNavItems, getVisibleWorkSessionNavItems, getVisibleRrhhNavItems, getVisibleReportsNavItems, maestrosGroupIcon, MAESTROS_GROUP_KEY, rrhhGroupIcon, RRHH_GROUP_KEY } from '../config/navigation'
 import NotificationBell from '../components/common/NotificationBell'
 import logo from '../assets/logo-sywork.jpg'
 
@@ -19,9 +19,11 @@ export default function DashboardPage() {
   const visibleTickets = getVisibleTicketNavItems(permissions)
   const visibleWorkSessions = getVisibleWorkSessionNavItems(permissions)
   const visibleRrhh = getVisibleRrhhNavItems(permissions)
+  const visibleReports = getVisibleReportsNavItems(permissions)
   const menuItems = [
     ...visibleTickets.map(({ key, icon, label }) => ({ key, icon, label })),
     ...visibleWorkSessions.map(({ key, icon, label }) => ({ key, icon, label })),
+    ...visibleReports.map(({ key, icon, label }) => ({ key, icon, label })),
     ...(visibleRrhh.length > 0
       ? [{
           key: RRHH_GROUP_KEY,

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { TeamOutlined, ProjectOutlined, UserOutlined, StarOutlined, DatabaseOutlined, SafetyCertificateOutlined, FileTextOutlined, DashboardOutlined, TagsOutlined, AppstoreOutlined, ClockCircleOutlined, BarChartOutlined, UnorderedListOutlined, FieldTimeOutlined, CalendarOutlined, IdcardOutlined } from '@ant-design/icons'
+import { TeamOutlined, ProjectOutlined, UserOutlined, StarOutlined, DatabaseOutlined, SafetyCertificateOutlined, FileTextOutlined, DashboardOutlined, TagsOutlined, AppstoreOutlined, ClockCircleOutlined, BarChartOutlined, UnorderedListOutlined, FieldTimeOutlined, CalendarOutlined, IdcardOutlined, PieChartOutlined } from '@ant-design/icons'
 import type { Permission } from '../types/api'
 
 export interface NavLeaf {
@@ -40,6 +40,15 @@ export const workSessionsNavItems: NavLeaf[] = [
   { key: '/registro-tiempos', icon: <ClockCircleOutlined />, label: 'Registro de Tiempos', module: 'work_sessions' },
   { key: '/reporte-tiempos', icon: <BarChartOutlined />, label: 'Reporte de Tiempos', module: 'work_sessions' },
 ]
+
+/** Spec 034 — Módulo de Reportes Dinámicos (menú dedicado, solo Admin/Coordinador/QM). */
+export const reportsNavItems: NavLeaf[] = [
+  { key: '/reportes', icon: <PieChartOutlined />, label: 'Reportes', module: 'reports' },
+]
+
+export function getVisibleReportsNavItems(permissions: Permission[]): NavLeaf[] {
+  return reportsNavItems.filter(item => hasNavAccess(permissions, item))
+}
 
 function hasNavAccess(permissions: Permission[], item: NavLeaf): boolean {
   const actions = Array.isArray(item.action) ? item.action : [item.action ?? 'view']

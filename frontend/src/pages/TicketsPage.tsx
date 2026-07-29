@@ -279,7 +279,8 @@ export default function TicketsPage() {
         .catch(() => message.error('No se pudo cargar la lista de Listas del proyecto'))
       // Spec 010 (US2): el solicitante se alimenta del personal del Proyecto — se limpia
       // y recarga al cambiar de proyecto.
-      clientContactService.list({ project_id: selectedProjectId, page_size: 100 })
+      // Spec 034 (US1/FR-003): excluye cuentas deshabilitadas de nuevas asignaciones
+      clientContactService.list({ project_id: selectedProjectId, page_size: 100, active: true })
         .then(r => setContacts(r.items))
         .catch(() => message.error('No se pudo cargar la lista de usuarios/cliente'))
       form.setFieldValue('list_id', undefined)

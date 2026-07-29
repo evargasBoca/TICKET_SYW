@@ -132,10 +132,11 @@ export default function TicketDetailPage() {
     /** Spec 010 (US2): el solicitante se alimenta del personal del Proyecto del ticket;
      * sin proyecto se mantiene la fuente por Cliente (spec 007). */
     if (ticket?.project?.id) {
-      clientContactService.list({ project_id: ticket.project.id, page_size: 100 }).then(r => setContacts(r.items))
+      // Spec 034 (US1/FR-003): excluye cuentas deshabilitadas de nuevas asignaciones
+      clientContactService.list({ project_id: ticket.project.id, page_size: 100, active: true }).then(r => setContacts(r.items))
         .catch(() => message.error('No se pudo cargar la lista de usuarios/cliente'))
     } else if (ticket?.client?.id) {
-      clientContactService.list({ client_id: ticket.client.id, page_size: 100 }).then(r => setContacts(r.items))
+      clientContactService.list({ client_id: ticket.client.id, page_size: 100, active: true }).then(r => setContacts(r.items))
         .catch(() => message.error('No se pudo cargar la lista de usuarios/cliente'))
     }
   }, [ticket?.project?.id, ticket?.client?.id])

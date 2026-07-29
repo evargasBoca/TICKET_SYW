@@ -21,7 +21,8 @@ class ClientContactRepository:
                        client_id: Optional[uuid.UUID] = None,
                        project_id: Optional[uuid.UUID] = None,
                        email: Optional[str] = None,
-                       username: Optional[str] = None) -> tuple[list[ClientContact], int]:
+                       username: Optional[str] = None,
+                       active: Optional[bool] = None) -> tuple[list[ClientContact], int]:
         q = self._db.query(ClientContactModel)
         if client_id:
             q = q.filter(ClientContactModel.client_id == client_id)
@@ -30,14 +31,17 @@ class ClientContactRepository:
             from backend.infra.models.project_member_model import ProjectMemberModel
             q = q.join(ProjectMemberModel, ProjectMemberModel.user_id == ClientContactModel.user_id)
             q = q.filter(ProjectMemberModel.project_id == project_id)
-        if email or username:
-            # Spec 010 (ajuste post-implementación): filtros de listado por email/usuario
+        if email or username or active is not None:
+            # Spec 010 (ajuste post-implementación): filtros de listado por email/usuario.
+            # Spec 034 (US1): filtro por estado Activo/Inactivo de la cuenta (users.active).
             from backend.infra.models.user_model import UserModel
             q = q.join(UserModel, UserModel.id == ClientContactModel.user_id)
             if email:
                 q = q.filter(UserModel.email.ilike(f"%{email}%"))
             if username:
                 q = q.filter(UserModel.username.ilike(f"%{username}%"))
+            if active is not None:
+                q = q.filter(UserModel.active == active)
         total = q.count()
         models = q.order_by(ClientContactModel.created_at).offset((page - 1) * page_size).limit(page_size).all()
         return [m.to_entity() for m in models], total

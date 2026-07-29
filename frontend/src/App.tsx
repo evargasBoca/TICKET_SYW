@@ -27,6 +27,7 @@ import CatalogsPage from './pages/CatalogsPage'
 import MyProfilePage from './pages/MyProfilePage'
 import WorkSessionsPage from './pages/WorkSessionsPage'
 import TimeReportPage from './pages/TimeReportPage'
+import ReportsPage from './pages/ReportsPage'
 import ProtectedRoute from './components/common/ProtectedRoute'
 import EnvironmentBanner, { BANNER_WIDTH } from './components/common/EnvironmentBanner'
 import { theme } from './theme'
@@ -55,6 +56,7 @@ function AppRoutes() {
         <Route path="catalogs" element={<ProtectedRoute requiredPermission={{ module: 'catalogs', action: 'view' }}><CatalogsPage /></ProtectedRoute>} />
         <Route path="registro-tiempos" element={<ProtectedRoute requiredPermission={{ module: 'work_sessions', action: 'view_own' }}><WorkSessionsPage /></ProtectedRoute>} />
         <Route path="reporte-tiempos" element={<ProtectedRoute requiredPermission={{ module: 'work_sessions', action: 'view_own' }}><TimeReportPage /></ProtectedRoute>} />
+        <Route path="reportes" element={<ProtectedRoute requiredPermission={{ module: 'reports', action: 'view' }}><ReportsPage /></ProtectedRoute>} />
         <Route path="clients" element={<ProtectedRoute requiredPermission={{ module: 'clients', action: 'view' }}><ClientsPage /></ProtectedRoute>} />
         <Route path="projects" element={<ProtectedRoute requiredPermission={{ module: 'projects', action: 'view' }}><ProjectsPage /></ProtectedRoute>} />
         <Route path="projects/:projectId/lists" element={<ProtectedRoute requiredPermission={{ module: 'tickets', action: 'create' }}><ProjectListsPage /></ProtectedRoute>} />

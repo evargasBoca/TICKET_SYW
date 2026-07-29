@@ -9,6 +9,8 @@ export interface ClientContact {
   client_id: string
   email: string
   username: string
+  /** Estado de la cuenta (spec 034, US1) — false = no puede iniciar sesión ni ser asignado. */
+  active: boolean
   client_name: string
   /** Proyectos vinculados vía personal del proyecto (spec 010). */
   projects: ContactProjectRef[]

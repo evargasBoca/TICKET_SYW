@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography, message } from 'antd'
-import { PlusOutlined, CopyOutlined, ProjectOutlined } from '@ant-design/icons'
+import { Alert, Button, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { PlusOutlined, CopyOutlined, ProjectOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { clientContactService } from '../services/clientContactService'
 import { clientService } from '../services/clientService'
@@ -9,6 +9,8 @@ import type { ClientContact, ClientContactCreateRequest } from '../types/clientC
 import type { ClientListItem } from '../types/client'
 import type { ProjectListItem } from '../types/project'
 import PageToolbar from '../components/common/PageToolbar'
+import StatusTag from '../components/common/StatusTag'
+import ConfirmationModal from '../components/common/ConfirmationModal'
 
 /** Alta y consulta de Usuarios/cliente (spec 010): usuarios externos de rol Usuario/cliente.
  * La relación operativa es con el **Proyecto** — el alta elige Proyecto, el Cliente se deriva
@@ -30,6 +32,8 @@ export default function ClientContactsPage() {
   const [emailFilter, setEmailFilter] = useState('')
   const [usernameFilter, setUsernameFilter] = useState('')
   const [clientFilter, setClientFilter] = useState<string | undefined>()
+  const [activeFilter, setActiveFilter] = useState<boolean | undefined>()
+  const [confirmDeactivate, setConfirmDeactivate] = useState<ClientContact | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -39,6 +43,7 @@ export default function ClientContactsPage() {
         email: emailFilter.trim() || undefined,
         username: usernameFilter.trim() || undefined,
         client_id: clientFilter,
+        active: activeFilter,
       })
       setContacts(res.items)
     } catch {
@@ -46,7 +51,7 @@ export default function ClientContactsPage() {
     } finally {
       setLoading(false)
     }
-  }, [emailFilter, usernameFilter, clientFilter])
+  }, [emailFilter, usernameFilter, clientFilter, activeFilter])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -105,10 +110,36 @@ export default function ClientContactsPage() {
     }
   }
 
+  // Spec 034 (US1): activar/desactivar la cuenta — deshabilitada no inicia sesión ni es
+  // elegible para nuevas asignaciones, sin perder su historial.
+  const handleDeactivate = async (contact: ClientContact) => {
+    try {
+      await clientContactService.setActive(contact.id, false)
+      message.success('Usuario/cliente deshabilitado')
+      setConfirmDeactivate(null)
+      load()
+    } catch {
+      message.error('No se pudo deshabilitar el Usuario/cliente')
+    }
+  }
+  const handleActivate = async (contact: ClientContact) => {
+    try {
+      await clientContactService.setActive(contact.id, true)
+      message.success('Usuario/cliente activado')
+      load()
+    } catch {
+      message.error('No se pudo activar el Usuario/cliente')
+    }
+  }
+
   const columns: ColumnsType<ClientContact> = [
     { title: 'Email', dataIndex: 'email' },
     { title: 'Usuario', dataIndex: 'username' },
     { title: 'Cliente', dataIndex: 'client_name' },
+    {
+      title: 'Estado', dataIndex: 'active',
+      render: (active: boolean) => <StatusTag active={active} />,
+    },
     {
       title: 'Proyectos', dataIndex: 'projects',
       render: (projects: ClientContact['projects']) => projects.length === 0
@@ -119,9 +150,14 @@ export default function ClientContactsPage() {
     {
       title: 'Acciones',
       render: (_: unknown, contact: ClientContact) => (
-        <Button size="small" icon={<ProjectOutlined />} onClick={() => setManagingContact(contact)}>
-          Gestionar proyectos
-        </Button>
+        <Space>
+          <Button size="small" icon={<ProjectOutlined />} onClick={() => setManagingContact(contact)}>
+            Gestionar proyectos
+          </Button>
+          {contact.active
+            ? <Tooltip title="Deshabilitar cuenta"><Button size="small" danger icon={<LockOutlined />} onClick={() => setConfirmDeactivate(contact)} /></Tooltip>
+            : <Tooltip title="Activar cuenta"><Button size="small" icon={<UnlockOutlined />} onClick={() => handleActivate(contact)} /></Tooltip>}
+        </Space>
       ),
     },
   ]
@@ -137,6 +173,9 @@ export default function ClientContactsPage() {
           <Select placeholder="Filtrar por cliente" allowClear showSearch optionFilterProp="label"
             style={{ width: 200 }} onChange={setClientFilter}
             options={clients.map(c => ({ value: c.id, label: c.name }))} />
+          <Select placeholder="Filtrar por estado" allowClear style={{ width: 160 }}
+            onChange={setActiveFilter}
+            options={[{ value: true, label: 'Activo' }, { value: false, label: 'Inactivo' }]} />
         </>}
         action={
           <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateOpen(true) }}>
@@ -227,6 +266,14 @@ export default function ClientContactsPage() {
           </Space.Compact>
         </>}
       </Modal>
+
+      {confirmDeactivate && (
+        <ConfirmationModal open title="Deshabilitar Usuario/cliente"
+          description={`${confirmDeactivate.username} no podrá iniciar sesión ni ser asignado a nuevos tickets o proyectos. Su historial se conserva.`}
+          confirmText="Deshabilitar"
+          onConfirm={() => handleDeactivate(confirmDeactivate)}
+          onCancel={() => setConfirmDeactivate(null)} />
+      )}
     </div>
   )
 }
