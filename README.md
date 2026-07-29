@@ -3,17 +3,18 @@
 Sistema interno de ticketing y gestión de tareas para el equipo de consultoría Oracle ERP/CRM
 de SyWork. Construido con metodología **SDD (Spec-Driven Development)** sobre **GitHub Spec Kit**.
 
-> **Fase activa**: `Festivos sincronizados por API, categorización visual y cumpleaños en el
-> Calendario` (spec `021`) ✅ implementada — los festivos oficiales de cada país se sincronizan
-> automáticamente desde una API pública (Nager.Date, con reintento y sin bloquear el sistema si
-> falla), se categorizan como **Oficial** (afecta disponibilidad) o **Regional/Religioso** (solo
-> informativo) con color/etiqueta propios, y la pestaña "Equipo" del calendario muestra el
-> cumpleaños de cada Recurso como evento anual recurrente. Precedida por la Fase 5 SDD V3
-> completa (spec `020`): calendarios multi-zona horaria por Cliente/Equipo, horario laboral
-> semanal, vacaciones/permisos con doble aprobación (Jefe directo + rol RRHH) y alerta de
-> disponibilidad (sin bloquear) al asignar tickets; por Accesos y conexiones múltiples del
-> Cliente — VPN/URL por ambiente/Escritorio remoto (spec `018`); y por unidades de tiempo
-> (minutos/horas/días) al configurar SLA (spec `019`). Rama: `develp_Jp`
+> **Fase activa**: `Deshabilitación de Usuarios/Cliente y Módulo de Reportes Dinámicos` (spec
+> `034`) ✅ implementada — las cuentas de rol Usuario/cliente ganan un estado Activo/Inactivo
+> gestionable desde Maestros (bloquea login y nuevas asignaciones sin borrar historial), y un
+> nuevo menú **Reportes** ofrece un grid interactivo estilo Oracle APEX sobre los tickets
+> (columnas mostrables/ocultables/reordenables, filtros por fecha/Cliente/Proyecto/Encargado,
+> agregaciones suma/promedio/conteo, exportación a Excel y Vistas Personalizadas guardadas por
+> usuario). Precedida por el cierre de observaciones UAT de los `ITER-006` a `ITER-009` (specs
+> `030`-`033`), la Fase 5 SDD V3 completa (specs `020`/`021`): calendarios multi-zona horaria por
+> Cliente/Equipo, horario laboral semanal, vacaciones/permisos con doble aprobación (Jefe directo
+> + rol RRHH) y alerta de disponibilidad (sin bloquear) al asignar tickets; por Accesos y
+> conexiones múltiples del Cliente — VPN/URL por ambiente/Escritorio remoto (spec `018`); y por
+> unidades de tiempo (minutos/horas/días) al configurar SLA (spec `019`). Rama: `develp_Jp`
 
 ---
 
@@ -52,6 +53,14 @@ Fuentes de verdad: `docs/SDD V3.docx` (roadmap y alcances) y
 
 ### Funcionalidad operativa
 
+- **Deshabilitación de Usuario/cliente y Módulo de Reportes** (spec `034`): desde
+  "Usuarios/cliente" (Maestros), Coordinador/Admin activan o desactivan la cuenta de un
+  Usuario/cliente — deshabilitada no puede iniciar sesión ni ser elegida en nuevas asignaciones
+  de ticket/proyecto, pero conserva intacto su historial. Nuevo menú **Reportes** (solo
+  Admin/Coordinador/QM) con un grid interactivo sobre los tickets: columnas
+  mostrables/ocultables/reordenables, filtros combinables (fecha, Cliente, Proyecto, Encargado),
+  agregaciones (suma/promedio/conteo) sobre el conjunto filtrado completo, exportación a Excel
+  (`.xlsx`) y Vistas Personalizadas guardadas por usuario.
 - **Festivos sincronizados por API, categorización visual y cumpleaños** (spec `021`): una tarea
   Celery sincroniza los festivos oficiales de cada país desde la API pública Nager.Date (con
   reintento; si falla, el sistema sigue operando con los festivos ya cargados), categorizándolos
@@ -240,6 +249,7 @@ Fuentes de verdad: `docs/SDD V3.docx` (roadmap y alcances) y
 - **Celery 5.4** + **Redis 5.2**: tarea periódica de vencimientos de SLA (spec `014`) y
   sincronización de festivos por país (spec `021`)
 - **`requests`** (spec `021`): cliente de la API pública de festivos Nager.Date
+- **`openpyxl`** (spec `034`): generación de archivos `.xlsx` para el Módulo de Reportes
 
 ### Frontend
 - **React 19** + **TypeScript strict** (prohibido `any`)
@@ -582,6 +592,7 @@ docker exec sywork_backend python -m backend.scripts.seed_tickets 500   # datos 
 | `019` | [sla-unidades-tiempo](specs/019-sla-unidades-tiempo/spec.md) | Selector de unidad (minutos/horas/días) en el tiempo límite de Diagnóstico/Análisis/Ejecución del SLA, con conversión interna a minutos | ✅ Completa — tasks 11/11 |
 | `020` | [calendarios-vacaciones-disponibilidad](specs/020-calendarios-vacaciones-disponibilidad/spec.md) | Fase 5 SDD V3: calendarios multi-zona horaria, festivos por país, horario laboral semanal, vacaciones/permisos con doble aprobación (Jefe directo + RRHH) y alerta de disponibilidad al asignar tickets | ✅ Completa — tasks 52/52 (7 fases) |
 | `021` | [festivos-api-cumpleanos](specs/021-festivos-api-cumpleanos/spec.md) | Festivos oficiales sincronizados por API pública (Nager.Date), categorización Oficial/Regional con color propio, y cumpleaños de Recursos en la pestaña "Equipo" del calendario | ✅ Completa — tasks 27/27 (6 fases) |
+| `034` | [usuarios-inactivos-reportes-grid](specs/034-usuarios-inactivos-reportes-grid/spec.md) | Estado Activo/Inactivo para cuentas Usuario/cliente (bloquea login y nuevas asignaciones) y Módulo de Reportes Dinámicos (grid interactivo con columnas configurables, filtros, agregaciones, exportación a Excel y Vistas Personalizadas) | ✅ Completa — tasks 34/34, validado contra Docker real |
 
 Cada carpeta de spec sigue la misma estructura: `spec.md`, `plan.md`, `research.md`,
 `data-model.md`, `contracts/`, `tasks.md`, `quickstart.md`.

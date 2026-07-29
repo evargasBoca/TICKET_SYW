@@ -56,6 +56,7 @@ _client_contact_out = ns.model("ClientContact", {
     "client_id": fields.String(),
     "email": fields.String(),
     "username": fields.String(),
+    "active": fields.Boolean(description="Estado de la cuenta (spec 034, US1)"),
     "client_name": fields.String(),
     "projects": fields.List(fields.Nested(_contact_project_ref),
                             description="Proyectos vinculados vía personal del proyecto (spec 010)"),
@@ -86,6 +87,7 @@ def _to_dict(contact: ClientContact, user, client, projects: list[dict] | None =
         "client_id": str(contact.client_id),
         "email": user.email if user else None,
         "username": user.username if user else None,
+        "active": user.active if user else None,
         "client_name": client.name if client else None,
         "projects": projects or [],
         "created_at": contact.created_at.isoformat() if contact.created_at else None,
@@ -103,6 +105,8 @@ class ClientContactList(Resource):
                   "type": "string"},
         "username": {"description": "Filtrar por nombre de usuario (búsqueda parcial)",
                      "type": "string"},
+        "active": {"description": "Filtrar por estado de la cuenta (true/false, spec 034)",
+                   "type": "boolean"},
         "page": {"description": "Número de página (default: 1)", "type": "integer", "default": 1},
         "page_size": {"description": "Registros por página, máx 100 (default: 20)", "type": "integer", "default": 20},
     })
@@ -130,11 +134,13 @@ class ClientContactList(Resource):
         project_id = parse_uuid(request.args.get("project_id") or "") or None
         email = (request.args.get("email") or "").strip() or None
         username = (request.args.get("username") or "").strip() or None
+        active_param = request.args.get("active")
+        active = None if active_param is None else active_param.lower() == "true"
         try:
             db = get_db()
             items, total = ClientContactRepository(db).list_paginated(
                 page=page, page_size=page_size, client_id=client_id, project_id=project_id,
-                email=email, username=username)
+                email=email, username=username, active=active)
             users_repo, clients_repo = UserRepository(db), ClientRepository(db)
             from backend.infra.repositories.project_member_repo import ProjectMemberRepository
             projects_by_user = ProjectMemberRepository(db).map_projects_by_user_ids(
@@ -237,6 +243,61 @@ class ClientContactList(Resource):
             return server_error()
 
 
+_active_input = ns.model("ClientContactActiveInput", {
+    "active": fields.Boolean(required=True, description="Nuevo estado de la cuenta"),
+})
+
+_active_out = ns.model("ClientContactActiveResult", {
+    "id": fields.String(),
+    "active": fields.Boolean(),
+})
+
+
+@ns.route("/<string:contact_id>/active")
+class ClientContactActive(Resource):
+    @ns.doc("set_client_contact_active")
+    @ns.expect(_active_input, validate=False)
+    @ns.response(200, "Estado actualizado", _active_out)
+    @ns.response(400, "Datos inválidos", _error)
+    @ns.response(401, "No autenticado", _error)
+    @ns.response(403, "Sin permiso client_contacts:manage", _error)
+    @ns.response(404, "Usuario/cliente no encontrado", _error)
+    @ns.response(409, "Sin cambio de estado (ya está en ese estado)", _error)
+    @ns.response(500, "Error interno del servidor", _error)
+    @require_permission("client_contacts", "manage")
+    def patch(self, contact_id: str):
+        """Activa o desactiva la cuenta de un Usuario/cliente (spec 034, US1). Gateado por el
+        mismo permiso `client_contacts:manage` que ya usa Coordinador/Admin para crear estas
+        cuentas — deliberadamente NO reutiliza `PATCH /api/users/{id}/deactivate`, que exige
+        `users:deactivate` (solo Admin) y aplicaría a cualquier usuario del sistema
+        (research.md Decisión 1)."""
+        from flask import request
+        contact_uuid = parse_uuid(contact_id)
+        if not contact_uuid:
+            return {"error": "not_found", "message": "Usuario/cliente no encontrado"}, 404
+        data = request.get_json(silent=True) or {}
+        if "active" not in data or not isinstance(data.get("active"), bool):
+            return {"error": "validation_error", "message": "El campo 'active' es requerido y debe ser booleano"}, 400
+        new_active = data["active"]
+        try:
+            db = get_db()
+            contact = ClientContactRepository(db).get_by_id(contact_uuid)
+            if not contact:
+                return {"error": "not_found", "message": "Usuario/cliente no encontrado"}, 404
+            users_repo = UserRepository(db)
+            user = users_repo.get_by_id(contact.user_id)
+            if not user:
+                return {"error": "not_found", "message": "Usuario/cliente no encontrado"}, 404
+            if user.active == new_active:
+                code = "already_active" if new_active else "already_inactive"
+                message = "El Usuario/cliente ya está activo" if new_active else "El Usuario/cliente ya está deshabilitado"
+                return {"error": code, "message": message}, 409
+            users_repo.set_active(contact.user_id, new_active)
+            return {"id": contact_id, "active": new_active}, 200
+        except Exception:
+            return server_error()
+
+
 _my_project_out = ns.model("MyProject", {
     "id": fields.String(description="UUID del proyecto"),
     "name": fields.String(),
@@ -331,6 +392,10 @@ class ClientContactProjects(Resource):
             contact = ClientContactRepository(db).get_by_id(contact_uuid)
             if not contact:
                 return {"error": "not_found", "message": "Usuario/cliente no encontrado"}, 404
+            contact_user = UserRepository(db).get_by_id(contact.user_id)
+            if not contact_user or not contact_user.active:
+                # Spec 034 (US1/FR-003): no se agregan Proyectos nuevos a cuentas deshabilitadas
+                return {"error": "contact_inactive", "message": "El Usuario/cliente está deshabilitado"}, 409
             projects_repo = ProjectRepository(db)
             member_repo = ProjectMemberRepository(db)
             resolved_client_id = _svc.resolve_common_client([project_id], projects_repo)

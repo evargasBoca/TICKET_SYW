@@ -119,6 +119,11 @@ def create_app() -> Flask:
 
     api.add_namespace(ns_calendar)
 
+    # ── spec 034 — Módulo de Reportes Dinámicos ────────────────────────────────
+    from backend.api.routes.reports import ns as ns_reports
+
+    api.add_namespace(ns_reports)
+
     # ── Health ────────────────────────────────────────────────────────────────
     ns_health = api.namespace("health", description="Estado del servicio y conectividad de DB")
 
