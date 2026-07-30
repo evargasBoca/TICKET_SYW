@@ -50,6 +50,16 @@ class CatalogRepository:
         self._db.commit()
         return model.to_dict()
 
+    def rename(self, catalog_id: uuid.UUID, name: str) -> Optional[dict]:
+        """spec 035 (US5): renombra un registro existente, preservando su id y referencias."""
+        model = self._db.get(self._model, catalog_id)
+        if not model:
+            return None
+        model.name = name
+        self._db.commit()
+        self._db.refresh(model)
+        return model.to_dict()
+
 
 class ToolProcessRepository:
     """Vínculos sugeridos Herramienta↔Proceso (OBS-0049) — tabla puente `tool_processes`."""

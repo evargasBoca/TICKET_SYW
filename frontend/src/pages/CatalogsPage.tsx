@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Card, Col, Form, Input, Row, Select, Space, Table, Tooltip, message } from 'antd'
-import { PlusOutlined, StopOutlined, PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Table, Tooltip, message } from 'antd'
+import { PlusOutlined, StopOutlined, PlayCircleOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { catalogService } from '../services/catalogService'
 import type { CatalogItem, CatalogName, ToolProcessLink } from '../types/catalog'
 import { CATALOG_LABELS, CATALOG_COLOR_PALETTE } from '../types/catalog'
@@ -18,6 +18,8 @@ function CatalogCard({ catalog }: { catalog: CatalogName }) {
   const [items, setItems] = useState<CatalogItem[]>([])
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm<{ name: string }>()
+  const [editingItem, setEditingItem] = useState<CatalogItem | null>(null)
+  const [renameForm] = Form.useForm<{ name: string }>()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -53,6 +55,22 @@ function CatalogCard({ catalog }: { catalog: CatalogName }) {
     }
   }
 
+  const openRename = (item: CatalogItem) => {
+    setEditingItem(item)
+    renameForm.setFieldsValue({ name: item.name })
+  }
+
+  const handleRename = async ({ name }: { name: string }) => {
+    if (!editingItem) return
+    try {
+      await catalogService.rename(catalog, editingItem.id, name.trim())
+      setEditingItem(null)
+      load()
+    } catch (err: unknown) {
+      message.error(apiError(err, 'No se pudo renombrar el valor'))
+    }
+  }
+
   return (
     <Card title={CATALOG_LABELS[catalog]} size="small">
       <Table
@@ -78,6 +96,14 @@ function CatalogCard({ catalog }: { catalog: CatalogName }) {
               (value, record) => String(record.active) === value,
             ),
           },
+          ...(canCreate ? [{
+            title: '', key: 'edit', width: 40,
+            render: (_: unknown, item: CatalogItem) => (
+              <Tooltip title="Editar nombre">
+                <Button size="small" icon={<EditOutlined />} onClick={() => openRename(item)} />
+              </Tooltip>
+            ),
+          }] : []),
           ...(canDeactivate ? [{
             title: '', key: 'toggle', width: 60,
             render: (_: unknown, item: CatalogItem) => (
@@ -90,6 +116,14 @@ function CatalogCard({ catalog }: { catalog: CatalogName }) {
           }] : []),
         ]}
       />
+      <Modal title="Editar nombre" open={!!editingItem} onCancel={() => setEditingItem(null)}
+        onOk={() => renameForm.submit()} okText="Guardar" destroyOnHidden>
+        <Form form={renameForm} layout="vertical" onFinish={handleRename}>
+          <Form.Item name="name" label="Nombre" rules={[{ required: true, message: 'Nombre requerido' }]}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
       {canCreate && (
         <Form form={form} layout="inline" onFinish={handleAdd} style={{ marginTop: 8 }}>
           <Form.Item name="name" rules={[{ required: true, message: 'Nombre requerido' }]}>

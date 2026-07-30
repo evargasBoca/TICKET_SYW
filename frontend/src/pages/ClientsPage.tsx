@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Divider, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tooltip, Upload, message } from 'antd'
+import { Button, Col, Divider, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tooltip, Upload, message } from 'antd'
 import { PlusOutlined, EditOutlined, StopOutlined, PlayCircleOutlined, EyeInvisibleOutlined, EyeOutlined, DeleteOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ColumnsType, TableProps } from 'antd/es/table'
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input'
@@ -379,24 +379,31 @@ export default function ClientsPage() {
         </Form>
       </Modal>
 
-      <Modal title="Detalle del cliente" open={detailOpen} onCancel={() => setDetailOpen(false)} footer={null} width={selectedDetail ? 820 : 520}>
+      <Modal title="Detalle del cliente" open={detailOpen} onCancel={() => setDetailOpen(false)} footer={null}
+        width={selectedDetail ? '90vw' : 520} style={{ maxWidth: selectedDetail ? 1400 : undefined }}>
         {selectedDetail && (
           <Tabs
             items={[
               {
                 key: 'general', label: 'Datos generales',
                 children: (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <div><strong>Nombre:</strong> {selectedDetail.name}</div>
-                    <div><strong>Contacto:</strong> {selectedDetail.contact_name}</div>
-                    <div><strong>Email:</strong> {selectedDetail.contact_email}</div>
-                    <div><strong>Facturación anual (USD):</strong>{' '}
-                      {selectedDetail.annual_billing_usd != null
-                        ? `$ ${selectedDetail.annual_billing_usd.toLocaleString('en-US')}`
-                        : '—'}
-                    </div>
-                    <div><strong>Notas:</strong> {selectedDetail.notes}</div>
-                  </Space>
+                  // spec 035 (US4): layout horizontal en pantallas anchas (Row/Col), apilado
+                  // legible en angostas (xs={24}) — mismos datos, sin campos nuevos.
+                  <Row gutter={[24, 8]}>
+                    <Col xs={24} md={12}>
+                      <div><strong>Nombre:</strong> {selectedDetail.name}</div>
+                      <div><strong>Contacto:</strong> {selectedDetail.contact_name}</div>
+                      <div><strong>Email:</strong> {selectedDetail.contact_email}</div>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <div><strong>Facturación anual (USD):</strong>{' '}
+                        {selectedDetail.annual_billing_usd != null
+                          ? `$ ${selectedDetail.annual_billing_usd.toLocaleString('en-US')}`
+                          : '—'}
+                      </div>
+                      <div><strong>Notas:</strong> {selectedDetail.notes}</div>
+                    </Col>
+                  </Row>
                 ),
               },
               {

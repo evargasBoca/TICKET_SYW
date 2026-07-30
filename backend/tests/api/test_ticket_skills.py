@@ -54,22 +54,33 @@ def test_update_skills_ignores_duplicate_ids(client, make_ticket, two_skills, co
     assert [s["id"] for s in response.get_json()["skills"]] == [skill_a["id"]]
 
 
-def test_resolver_cannot_edit_ticket_skills(client, make_ticket, two_skills, resolver_auth):
-    """Resolutor tiene tickets:view/create/transition pero NO tickets:manage_skills en este
-    sistema (research.md Decisión 4; OBS-0047/0048 spec 033) — igual que para el resto de la
-    clasificación del ticket."""
+def test_resolver_can_edit_ticket_skills(client, make_ticket, two_skills, resolver_auth):
+    """spec 035 (feedback UAT): tickets:manage_skills se amplió a todo rol interno, incluido
+    Resolutor (antes solo Coordinador, OBS-0047/0048 spec 033)."""
     ticket = make_ticket()
     response = client.patch(f"/api/tickets/{ticket['id']}/skills",
                             json={"skill_ids": [two_skills[0]["id"]]}, headers=resolver_auth)
-    assert response.status_code == 403, response.get_json()
+    assert response.status_code == 200, response.get_json()
+    assert [s["id"] for s in response.get_json()["skills"]] == [two_skills[0]["id"]]
 
 
-def test_admin_cannot_edit_ticket_skills(client, make_ticket, two_skills):
-    """OBS-0047/0048 (spec 033): Admin tiene tickets:edit pero ya NO tickets:manage_skills —
-    solo lectura para este campo (el fixture `client` por defecto está autenticado como Admin)."""
+def test_admin_can_edit_ticket_skills(client, make_ticket, two_skills):
+    """spec 035 (feedback UAT): Admin recupera tickets:manage_skills (el fixture `client` por
+    defecto está autenticado como Admin) — ya no queda en solo lectura para este campo."""
     ticket = make_ticket()
     response = client.patch(f"/api/tickets/{ticket['id']}/skills",
                             json={"skill_ids": [two_skills[0]["id"]]})
+    assert response.status_code == 200, response.get_json()
+    assert [s["id"] for s in response.get_json()["skills"]] == [two_skills[0]["id"]]
+
+
+def test_encargado_cannot_edit_ticket_skills(client, make_ticket, two_skills, encargado_auth):
+    """spec 035: Usuario/cliente (rol externo) sigue siendo el único rol sin
+    tickets:manage_skills — el resto de roles internos (Admin/Coordinador/QM/Resolutor) sí lo
+    tienen tras esta feature."""
+    ticket = make_ticket()
+    response = client.patch(f"/api/tickets/{ticket['id']}/skills",
+                            json={"skill_ids": [two_skills[0]["id"]]}, headers=encargado_auth)
     assert response.status_code == 403, response.get_json()
 
 

@@ -26,6 +26,10 @@ _SORTS = {
     "priority": (_PRIORITY_URGENCY.asc(),),
     "-priority": (_PRIORITY_URGENCY.desc(),),
     "status": (TicketModel.status.asc(),),
+    "-status": (TicketModel.status.desc(),),
+    # spec 035 (FR-008): ordenamiento explícito por código de ticket/tarea.
+    "code": (TicketModel.ticket_number.asc(),),
+    "-code": (TicketModel.ticket_number.desc(),),
     # OBS-0028: default sugerido — urgencia real de prioridad, luego severidad
     # (s1..s4 ya ordena correctamente en alfabético), luego más antiguo primero.
     "urgency": (_PRIORITY_URGENCY.asc(), TicketModel.severity.asc(), TicketModel.created_at.asc()),

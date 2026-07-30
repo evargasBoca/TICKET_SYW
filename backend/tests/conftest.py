@@ -176,8 +176,8 @@ def resolver_auth(app, resolver_user):
 
 @pytest.fixture()
 def coordinator_auth(coordinator_token):
-    """Header Authorization del Coordinador semilla (único rol con tickets:manage_skills,
-    OBS-0047/0048 spec 033)."""
+    """Header Authorization del Coordinador semilla (rol interno con tickets:manage_skills,
+    OBS-0047/0048 spec 033 — permiso ampliado a todo rol interno en spec 035)."""
     return {"Authorization": f"Bearer {coordinator_token}"}
 
 

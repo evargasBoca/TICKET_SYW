@@ -78,6 +78,43 @@ class CatalogList(Resource):
             return server_error()
 
 
+@ns.route("/<string:catalog>/<string:item_id>")
+@ns.param("catalog", "tools | processes | resolution-types | record-types | teams | access-types")
+class CatalogRename(Resource):
+    @ns.doc("rename_catalog_value")
+    @ns.response(401, "No autenticado (token ausente o invalido)", _error)
+    @ns.response(403, "Sin el permiso requerido", _error)
+    @ns.expect(_catalog_input, validate=False)
+    @ns.response(200, "Valor renombrado", _catalog_out)
+    @ns.response(400, "Nombre vacío o ID inválido", _error)
+    @ns.response(404, "Catálogo o valor no encontrado", _error)
+    @ns.response(409, "Nombre duplicado", _error)
+    @require_permission("catalogs", "create")
+    def patch(self, catalog: str, item_id: str):
+        """Renombrar un valor existente (spec 035, US5) — reutiliza el permiso catalogs:create"""
+        invalid = _validate_catalog(catalog)
+        if invalid:
+            return invalid
+        uid = parse_uuid(item_id)
+        if not uid:
+            return {"error": "validation_error", "message": "ID inválido"}, 400
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name", "")).strip()
+        if not name:
+            return {"error": "validation_error", "message": "El campo 'name' es requerido"}, 400
+        try:
+            repo = CatalogRepository(get_db(), catalog)
+            existing = repo.get_by_name(name)
+            if existing and existing["id"] != str(uid):
+                return {"error": "name_duplicate", "message": f"Ya existe el valor '{name}' en el catálogo"}, 409
+            result = repo.rename(uid, name)
+            if not result:
+                return {"error": "not_found", "message": "Valor no encontrado"}, 404
+            return result, 200
+        except Exception:
+            return server_error()
+
+
 @ns.route("/<string:catalog>/<string:item_id>/deactivate")
 @ns.param("catalog", "tools | processes | resolution-types | record-types | teams")
 class CatalogDeactivate(Resource):

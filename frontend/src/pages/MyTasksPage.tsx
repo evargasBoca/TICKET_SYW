@@ -24,6 +24,7 @@ export default function MyTasksPage() {
   const [loading, setLoading] = useState(false)
   /** `null` mientras se resuelve el preset "Asignado a mí" por defecto al montar. */
   const [criteria, setCriteria] = useState<TicketFilterCriteria | null>(null)
+  const [sort, setSort] = useState('urgency')
 
   useEffect(() => {
     resourceService.me().then(resource => setCriteria({ assignee_id: resource.id }))
@@ -42,6 +43,7 @@ export default function MyTasksPage() {
         priority: criteria.priority,
         severity: criteria.severity,
         assignee_id: criteria.assignee_id,
+        sort,
       })
       setTickets(res.items)
       setTotal(res.total)
@@ -50,7 +52,7 @@ export default function MyTasksPage() {
     } finally {
       setLoading(false)
     }
-  }, [criteria, page])
+  }, [criteria, page, sort])
 
   useEffect(() => { load() }, [load])
 
@@ -72,7 +74,9 @@ export default function MyTasksPage() {
 
   const columns: ColumnsType<TicketListItem> = [
     { title: 'Número', dataIndex: 'ticket_number', width: 110,
-      render: (v: string) => <span className="tabular-nums">{v}</span> },
+      render: (v: string, t: TicketListItem) => <a className="tabular-nums" onClick={() => navigate(`/tickets/${t.id}`, {
+        state: { from: { pathname: '/my-tasks', label: 'Mis Tareas' } },
+      })}>{v}</a> },
     {
       title: 'Tipo', dataIndex: 'record_type', width: 70,
       render: (recordType: TicketListItem['record_type']) => (
@@ -119,7 +123,7 @@ export default function MyTasksPage() {
         <SavedFiltersBar currentCriteria={criteria ?? {}} onApply={applySavedFilter} />
       </div>
 
-      <div style={{ marginBottom: 8 }}><SortIndicator /></div>
+      <div style={{ marginBottom: 8 }}><SortIndicator value={sort} onChange={setSort} /></div>
 
       {groupNames.map(name => (
         <div key={name} style={{ marginBottom: 20 }}>
