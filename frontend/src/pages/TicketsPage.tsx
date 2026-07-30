@@ -96,9 +96,9 @@ export default function TicketsPage() {
   const navigate = useNavigate()
   const canCreate = hasPermission('tickets', 'create')
   const canAssign = hasPermission('tickets', 'assign')
-  // OBS-0047/0048 (spec 033): "Skills requeridas" pasa a un permiso dedicado (solo Coordinador)
-  // en vez de tickets:edit — Admin/QM crean tickets sin poder fijar Skills requeridas (las puede
-  // agregar después un Coordinador desde el detalle del ticket).
+  // OBS-0047/0048 (spec 033): "Skills requeridas" usa un permiso dedicado en vez de
+  // tickets:edit. Ampliado en spec 035 a todo rol interno (Admin/Coordinador/QM/Resolutor);
+  // Usuario/cliente (externo) no lo tiene.
   const canManageSkills = hasPermission('tickets', 'manage_skills')
   /** Usuario/cliente (Fase 2.1 US3, renombrado spec 010): alta simplificada (solo título/descripción), sin acceso a
    * catálogos/clientes/recursos internos — el backend ya filtra su listado a lo propio. */
@@ -298,9 +298,8 @@ export default function TicketsPage() {
       const { skill_ids, ...ticketFields } = values
       const rawAttachments = descriptionAttachments.map(f => f.originFileObj).filter((f): f is NonNullable<typeof f> => !!f)
       const created = await ticketService.create(ticketFields, pendingDescriptionImages, rawAttachments)
-      // OBS-0047/0048: solo quien tiene tickets:manage_skills fija Skills requeridas (el campo
-      // ni siquiera se muestra sin el permiso, pero se guarda por si acaso cambia el rol a mitad
-      // de una sesión abierta).
+      // OBS-0047/0048: solo quien tiene tickets:manage_skills fija Skills requeridas (spec 035:
+      // el campo se muestra deshabilitado sin el permiso, así que igual no llega con valores).
       if (canManageSkills && skill_ids?.length) {
         await ticketService.updateTicketSkills(created.id, skill_ids)
       }
@@ -583,8 +582,8 @@ export default function TicketsPage() {
                     options={processOptions} />
                 </Form.Item>
               </Space>
-              {/* spec 035: visible para todos los roles internos — solo Coordinador puede
-                 editarla (tickets:manage_skills), el resto la ve deshabilitada. */}
+              {/* spec 035: visible para todos los roles internos; deshabilitada solo para quien
+                 no tenga tickets:manage_skills (Usuario/cliente no ve este bloque). */}
               <Form.Item name="skill_ids" label="Skills requeridas (opcional)">
                 <Select mode="multiple" allowClear disabled={!canManageSkills}
                   placeholder="Sin Skills requeridas" options={skillOptions} />

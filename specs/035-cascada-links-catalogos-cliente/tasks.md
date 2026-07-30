@@ -42,8 +42,9 @@ No aplica — ninguna historia depende de infraestructura compartida nueva (sin 
 - [X] T003 [US1] En `frontend/src/pages/TicketsPage.tsx`, eliminar el `Select disabled` de Cliente auto-derivado (antiguo flujo "Proyecto primero") y el bloque de SLA aplicable (`Descriptions` de "Nivel de servicio") pasa a depender de `selectedProjectId` del nuevo flujo único (sin cambiar su contenido)
 - [X] T004 [US1] En `frontend/src/pages/TicketsPage.tsx` (~línea 614), quitar el guard `canManageSkills &&` que oculta por completo el `Form.Item name="skill_ids"`; renderizarlo siempre y pasar `disabled={!canManageSkills}` al `Select`
 - [X] T005 [US1] Verificación manual contra Docker real siguiendo `quickstart.md` sección US1 (crear Ticket y Tarea vía cascada, ≤10 registros de prueba, sin tocar clientes semilla reales)
+- [X] T005b [US1] Corrección post-implementación (feedback UAT 2026-07-30, FR-005 enmendada): nueva migración `051_manage_skills_all_internal_roles.py` que amplía `tickets:manage_skills` a Admin/QM/Resolutor (Coordinador ya lo tenía); actualiza `backend/tests/api/test_ticket_skills.py` (Admin/Resolutor ahora pueden, se agrega `test_encargado_cannot_edit_ticket_skills` para cubrir el único rol que sigue bloqueado); verificado en Docker real re-logueando como Resolutor: `PATCH /api/tickets/{id}/skills` → 200 OK
 
-**Checkpoint**: Cascada y Skills funcionando de punta a punta para Ticket y Tarea.
+**Checkpoint**: Cascada y Skills funcionando de punta a punta para Ticket y Tarea, con el permiso ya alcanzando a todo rol interno.
 
 ---
 
