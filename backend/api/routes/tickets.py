@@ -673,9 +673,10 @@ class TicketList(Resource):
         "ticket_type": {"description": "incident | evolutive | preventive", "type": "string"},
         "assignee_id": {"description": "Filtrar por UUID de recurso asignado", "type": "string"},
         "escalation_level": {"description": "n1 | n2 | n3 | n4", "type": "string"},
-        "sort": {"description": "urgency | created_at | -created_at | priority | -priority | status "
-                                 "(default: urgency — prioridad real, luego severidad, luego más antiguo primero; "
-                                 "OBS-0028)", "type": "string"},
+        "sort": {"description": "urgency | created_at | -created_at | priority | -priority | status | -status | "
+                                 "code | -code (default: urgency — prioridad real, luego severidad, luego más "
+                                 "antiguo primero; OBS-0028; code/-code y -status agregados en spec 035)",
+                  "type": "string"},
         "sla_status": {"description": "sin_sla | corriendo | pausado | vencido | detenido "
                                        "(Fase 4, spec 014)", "type": "string"},
         "sla_expiring_within_hours": {"description": "Tickets con SLA corriendo cuyo tiempo "

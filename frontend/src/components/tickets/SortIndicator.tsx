@@ -1,13 +1,34 @@
-import { Tag } from 'antd'
-import { SortDescendingOutlined } from '@ant-design/icons'
-import { palette } from '../../theme'
+import { Select } from 'antd'
+import { SortAscendingOutlined, SortDescendingOutlined } from '@ant-design/icons'
 
-/** OBS-0028: indicador visual del criterio de orden activo (por ahora fijo — el
- * default 'urgency' de la API no es configurable desde la UI todavía). */
-export default function SortIndicator() {
+const SORT_OPTIONS = [
+  { value: 'urgency', label: 'Prioridad (sugerido)' },
+  { value: 'created_at', label: 'Fecha ↑' },
+  { value: '-created_at', label: 'Fecha ↓' },
+  { value: 'priority', label: 'Prioridad ↑' },
+  { value: '-priority', label: 'Prioridad ↓' },
+  { value: 'code', label: 'Código ↑' },
+  { value: '-code', label: 'Código ↓' },
+  { value: 'status', label: 'Estado ↑' },
+  { value: '-status', label: 'Estado ↓' },
+]
+
+interface SortIndicatorProps {
+  value: string
+  onChange: (value: string) => void
+}
+
+/** spec 035 (US3/FR-008): reemplaza el indicador fijo de OBS-0028 ("por ahora fijo") por un
+ * selector real de ordenamiento explícito (fecha/prioridad/código/estado, asc/desc),
+ * combinable con los filtros existentes de cada pantalla. */
+export default function SortIndicator({ value, onChange }: SortIndicatorProps) {
   return (
-    <Tag icon={<SortDescendingOutlined />} color="default" style={{ color: palette.slate600, borderColor: palette.slate200 }}>
-      Ordenado por: Prioridad
-    </Tag>
+    <Select
+      value={value}
+      onChange={onChange}
+      options={SORT_OPTIONS}
+      style={{ width: 200 }}
+      suffixIcon={value.startsWith('-') ? <SortDescendingOutlined /> : <SortAscendingOutlined />}
+    />
   )
 }

@@ -12,7 +12,6 @@ import { getKanbanTransition, reachableFrom } from '../config/kanbanTransitions'
 import PriorityBadge from '../components/tickets/PriorityBadge'
 import AssignModal from '../components/tickets/AssignModal'
 import SavedFiltersBar from '../components/tickets/SavedFiltersBar'
-import SortIndicator from '../components/tickets/SortIndicator'
 import { avatarColor, initials, palette, vivid, TICKET_STATUS_CHIP } from '../theme'
 import { useAuthStore } from '../store/authStore'
 import type { TicketFilterCriteria } from '../store/savedFiltersStore'
@@ -239,7 +238,6 @@ export default function KanbanPage() {
 
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <SavedFiltersBar currentCriteria={currentCriteria} onApply={applySavedFilter} />
-        <SortIndicator />
       </div>
 
       {loading && !columns ? (
@@ -303,9 +301,15 @@ export default function KanbanPage() {
                                 }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: palette.slate400 }}>
+                                  <a
+                                    style={{ fontSize: 11, fontWeight: 700, color: palette.slate400 }}
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      navigate(`/tickets/${t.id}`, { state: { from: { pathname: '/kanban', label: 'Kanban' } } })
+                                    }}
+                                  >
                                     {t.ticket_number}
-                                  </span>
+                                  </a>
                                   {t.record_type === 'Tarea' && (
                                     <span style={{
                                       fontSize: 10, fontWeight: 700, padding: '0 6px', borderRadius: 999,

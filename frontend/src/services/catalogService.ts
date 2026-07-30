@@ -9,6 +9,10 @@ export const catalogService = {
   create: (catalog: CatalogName, name: string) =>
     apiClient.post<CatalogItem>(`/api/catalogs/${catalog}`, { name }).then(r => r.data),
 
+  /** spec 035 (US5): renombra un registro existente, preservando su id y referencias. */
+  rename: (catalog: CatalogName, id: string, name: string) =>
+    apiClient.patch<CatalogItem>(`/api/catalogs/${catalog}/${id}`, { name }).then(r => r.data),
+
   deactivate: (catalog: CatalogName, id: string) =>
     apiClient.patch<CatalogItem>(`/api/catalogs/${catalog}/${id}/deactivate`).then(r => r.data),
 

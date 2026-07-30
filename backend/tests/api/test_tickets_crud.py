@@ -84,6 +84,23 @@ def test_default_sort_is_urgency_not_created_at(client, make_ticket, ticket_clie
     assert ids_in_order.index(high_s1["id"]) < ids_in_order.index(high_s3["id"])
 
 
+def test_sort_by_code_and_status_desc(client, make_ticket, ticket_client):
+    """spec 035 (FR-008): `sort=code`/`-code` ordena por número de ticket; `-status` invierte
+    el orden alfabético ascendente que ya soportaba `status`."""
+    first = make_ticket()
+    second = make_ticket()
+    response = client.get(f"/api/tickets?client_id={ticket_client['id']}&sort=code&page_size=10")
+    ids_in_order = [t["id"] for t in response.get_json()["items"]]
+    assert ids_in_order.index(first["id"]) < ids_in_order.index(second["id"])
+
+    response_desc = client.get(f"/api/tickets?client_id={ticket_client['id']}&sort=-code&page_size=10")
+    ids_desc = [t["id"] for t in response_desc.get_json()["items"]]
+    assert ids_desc.index(second["id"]) < ids_desc.index(first["id"])
+
+    response_status = client.get(f"/api/tickets?client_id={ticket_client['id']}&sort=-status&page_size=10")
+    assert response_status.status_code == 200
+
+
 def test_detail_includes_locked_fields_and_histories(client, make_ticket):
     ticket = make_ticket()
     detail = client.get(f"/api/tickets/{ticket['id']}").get_json()
