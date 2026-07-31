@@ -305,6 +305,22 @@ export default function TicketDetailPage() {
                   </Button>
                 </Descriptions.Item>
               )}
+              {isTask && !isSubtask && (
+                <Descriptions.Item label="Subtareas">
+                  {ticket.subtasks.length === 0 ? (
+                    <em style={{ color: palette.slate400 }}>Sin subtareas</em>
+                  ) : (
+                    <Space direction="vertical" size={2}>
+                      {ticket.subtasks.map(s => (
+                        <Button key={s.id} type="link" size="small" style={{ padding: 0, height: 'auto' }}
+                          onClick={() => navigate(`/tickets/${s.id}`)}>
+                          {s.ticket_number} — {s.title}
+                        </Button>
+                      ))}
+                    </Space>
+                  )}
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="Proyecto">{ticket.project?.name ?? '—'}</Descriptions.Item>
               <Descriptions.Item label="Tipo de registro">
                 {recordTypes.find(rt => rt.id === ticket.record_type_id)?.name ?? '—'}
