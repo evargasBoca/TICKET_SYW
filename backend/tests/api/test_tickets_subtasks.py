@@ -117,6 +117,71 @@ def test_subtask_parent_must_be_a_task_not_a_ticket(client, make_ticket, tarea_r
     assert resp.get_json()["error"] == "parent_task_mismatch"
 
 
+def _make_contact(client, client_id, unique_name, suffix=""):
+    resp = client.post("/api/client-contacts", json={
+        "email": f"contacto.sub{suffix}.{unique_name}@clienteexterno.com",
+        "username": f"contacto_sub{suffix}_{unique_name}",
+        "client_id": client_id,
+    })
+    assert resp.status_code == 201, resp.get_json()
+    return resp.get_json()
+
+
+def _link_to_project(client, project_id, user_id):
+    resp = client.post(f"/api/projects/{project_id}/members", json={"user_id": user_id})
+    assert resp.status_code == 201, resp.get_json()
+    return resp.get_json()
+
+
+def _make_skill(client, unique_name, suffix=""):
+    resp = client.post("/api/skills", json={
+        "code": f"SUB_{unique_name}{suffix}", "label": f"Skill Subtarea {suffix}",
+        "skill_type": "tecnico",
+    })
+    assert resp.status_code == 201, resp.get_json()
+    return resp.get_json()
+
+
+# spec 036, US1 (FR-001/FR-002/FR-003): la Subtarea hereda Nivel de escalamiento, Usuario
+# solicitante/cliente y Skills requeridas de la Tarea padre cuando no vienen explícitos en el
+# payload — mismo criterio ya usado para `list_id` (test_subtask_inherits_parent_list, arriba).
+def test_subtask_inherits_escalation_contact_and_skills(
+        client, ticket_client, ticket_project, tarea_record_type_id, unique_name):
+    contact = _make_contact(client, ticket_client["id"], unique_name)
+    _link_to_project(client, ticket_project["id"], contact["user_id"])
+    tarea = _make_task(client, ticket_client, ticket_project, tarea_record_type_id,
+                       escalation_level="n3", client_contact_id=contact["id"])
+    skill_a, skill_b = (_make_skill(client, unique_name, "_A"), _make_skill(client, unique_name, "_B"))
+    client.patch(f"/api/tickets/{tarea['id']}/skills",
+                json={"skill_ids": [skill_a["id"], skill_b["id"]]})
+
+    subtask = client.post("/api/tickets", json={
+        "title": "Subtarea con herencia", "description": "d", "client_id": ticket_client["id"],
+        "project_id": ticket_project["id"], "record_type_id": tarea_record_type_id,
+        "parent_task_id": tarea["id"],
+    })
+    assert subtask.status_code == 201, subtask.get_json()
+    body = subtask.get_json()
+    assert body["escalation_level"] == "n3"
+    assert body["client_contact_id"] == contact["id"]
+    assert {s["id"] for s in body["skills"]} == {skill_a["id"], skill_b["id"]}
+
+
+def test_subtask_explicit_escalation_level_overrides_inheritance(
+        client, ticket_client, ticket_project, tarea_record_type_id):
+    tarea = _make_task(client, ticket_client, ticket_project, tarea_record_type_id,
+                       escalation_level="n3")
+
+    subtask = client.post("/api/tickets", json={
+        "title": "Subtarea con escalamiento propio", "description": "d",
+        "client_id": ticket_client["id"], "project_id": ticket_project["id"],
+        "record_type_id": tarea_record_type_id, "parent_task_id": tarea["id"],
+        "escalation_level": "n1",
+    })
+    assert subtask.status_code == 201, subtask.get_json()
+    assert subtask.get_json()["escalation_level"] == "n1"
+
+
 def test_subtask_inherits_parent_list(
         client, ticket_client, ticket_project, tarea_record_type_id):
     task_list = client.post(f"/api/projects/{ticket_project['id']}/task-lists",

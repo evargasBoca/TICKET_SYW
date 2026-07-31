@@ -262,6 +262,12 @@ _related_from_out = ns.model("RelatedFromItem", {
     "record_type": fields.String(description="Ticket | Tarea"),
 })
 
+_parent_task_out = ns.model("ParentTaskSummary", {
+    "id": fields.String(description="UUID de la Tarea padre"),
+    "ticket_number": fields.String(),
+    "title": fields.String(),
+})
+
 _ticket_skill_ref = ns.model("TicketSkillRef", {
     "id": fields.String(description="UUID del skill"),
     "code": fields.String(description="Código del skill"),
@@ -306,6 +312,9 @@ _ticket_detail_out = ns.inherit("TicketDetail", _ticket_out, {
     "subtasks": fields.List(fields.Nested(_ticket_out),
                             description="Subtareas (Nivel 5) — solo poblado en una Tarea "
                                         "(Nivel 4); vacío para Ticket y para Subtarea (spec 009)"),
+    "parent": fields.Nested(_parent_task_out, allow_null=True,
+                           description="Resumen navegable de la Tarea padre (spec 036, FR-007); "
+                                       "null salvo que este registro sea una Subtarea"),
     "created_by": fields.String(description="UUID de quien creó el ticket"),
     "client_contact_id": fields.String(allow_null=True,
                                        description="Usuario/cliente solicitante asignado manualmente "
@@ -510,6 +519,17 @@ def _related_from(ticket: Ticket, db) -> list[dict]:
     ]
 
 
+def _parent_summary(ticket: Ticket, db) -> dict | None:
+    """spec 036, US3 (FR-007): resumen navegable de la Tarea padre para el campo "Tarea Padre"
+    en el detalle de una Subtarea. `None` cuando el registro no es una Subtarea."""
+    if not ticket.parent_task_id:
+        return None
+    parent = TicketRepository(db).get_by_id(ticket.parent_task_id)
+    if not parent:
+        return None
+    return {"id": str(parent.id), "ticket_number": parent.number_display, "title": parent.title}
+
+
 def _ticket_detail(ticket: Ticket, db) -> dict:
     d = _ticket_summary(ticket, db)
     is_task = _is_task(ticket, db)
@@ -530,6 +550,7 @@ def _ticket_detail(ticket: Ticket, db) -> dict:
         "related_ticket_id": str(ticket.related_ticket_id) if ticket.related_ticket_id else None,
         "related_from": _related_from(ticket, db),
         "subtasks": [_ticket_summary(s, db) for s in subtasks],
+        "parent": _parent_summary(ticket, db),
         "created_by": str(ticket.created_by),
         "client_contact_id": str(ticket.client_contact_id) if ticket.client_contact_id else None,
         "requester": _requester(ticket, db),
@@ -886,6 +907,17 @@ class TicketList(Resource):
                 # propia editable después (spec 009, Assumptions).
                 if parent_ticket and list_id is None:
                     list_id = parent_ticket.list_id
+                # spec 036, US1 (FR-001/FR-002/FR-003): la Subtarea hereda Nivel de escalamiento,
+                # Usuario solicitante/cliente y Skills requeridas de la Tarea padre cuando no
+                # vienen explícitos en el payload — mismo criterio de arriba para `list_id`.
+                if parent_ticket and not data.get("escalation_level"):
+                    data["escalation_level"] = parent_ticket.escalation_level
+                if parent_ticket and client_contact_id is None:
+                    client_contact_id = parent_ticket.client_contact_id
+                inherited_skill_ids = (
+                    [s.id for s in parent_ticket.skills] if parent_ticket else [])
+            else:
+                inherited_skill_ids = []
             # SLA (Fase 4, spec 014, FR-012): solo se calcula para record_type "Ticket", nunca
             # para Tareas/Subtareas. Un fallo aquí no debe impedir la creación del ticket.
             sla_fields: dict = {}
@@ -934,6 +966,11 @@ class TicketList(Resource):
                 **sla_fields,
             )
             created = TicketRepository(db).create(ticket)
+            # spec 036, US1 (FR-003): copia el set de Skills requeridas de la Tarea padre cuando
+            # el alta de la Subtarea no trae `skill_ids` propios (las Skills no viajan en este
+            # POST — spec 011 — se aplican vía el mismo mecanismo que `PATCH /skills`).
+            if parent_task_id and not data.get("skill_ids") and inherited_skill_ids:
+                created = TicketRepository(db).update_skills(created.id, inherited_skill_ids) or created
             comment_repo = CommentRepository(db)
             for attachment_id, filename, content_type, content in staged_inline:
                 path = attachment_storage.save(created.id, filename, content)
