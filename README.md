@@ -3,18 +3,34 @@
 Sistema interno de ticketing y gestión de tareas para el equipo de consultoría Oracle ERP/CRM
 de SyWork. Construido con metodología **SDD (Spec-Driven Development)** sobre **GitHub Spec Kit**.
 
-> **Fase activa**: `Deshabilitación de Usuarios/Cliente y Módulo de Reportes Dinámicos` (spec
-> `034`) ✅ implementada — las cuentas de rol Usuario/cliente ganan un estado Activo/Inactivo
-> gestionable desde Maestros (bloquea login y nuevas asignaciones sin borrar historial), y un
-> nuevo menú **Reportes** ofrece un grid interactivo estilo Oracle APEX sobre los tickets
-> (columnas mostrables/ocultables/reordenables, filtros por fecha/Cliente/Proyecto/Encargado,
-> agregaciones suma/promedio/conteo, exportación a Excel y Vistas Personalizadas guardadas por
-> usuario). Precedida por el cierre de observaciones UAT de los `ITER-006` a `ITER-009` (specs
-> `030`-`033`), la Fase 5 SDD V3 completa (specs `020`/`021`): calendarios multi-zona horaria por
-> Cliente/Equipo, horario laboral semanal, vacaciones/permisos con doble aprobación (Jefe directo
-> + rol RRHH) y alerta de disponibilidad (sin bloquear) al asignar tickets; por Accesos y
-> conexiones múltiples del Cliente — VPN/URL por ambiente/Escritorio remoto (spec `018`); y por
-> unidades de tiempo (minutos/horas/días) al configurar SLA (spec `019`). Rama: `develp_Jp`
+> **Fase activa**: `Subtareas en Clasificación de la Tarea principal` (spec `037`) ✅ implementada
+> — la Card "Clasificación" del detalle de una Tarea gana un ítem "Subtareas" que lista cada
+> Subtarea ya creada como hipervínculo (o "Sin subtareas"), corrigiendo la impresión de que crear
+> una Subtarea "no tenía efecto" en la Tarea padre — la relación ya existía (tarjeta lateral
+> "Subtareas (N)") pero no se reflejaba ahí; sin cambios de backend. Precedida por la Herencia de
+> Subtareas, Vínculo Bidireccional y fix de Scroll (spec `036`): una Subtarea hereda de su Tarea
+> padre el Nivel de escalamiento, el Usuario/cliente solicitante y las Skills requeridas al
+> crearse; la Subtarea muestra "Tarea Padre" como hipervínculo; y se corrige un parpadeo del panel
+> izquierdo del detalle del Ticket (zona muerta de 12px + throttle por `requestAnimationFrame` en
+> el listener de scroll que colapsa/expande el resumen de tiempo). Antes, la Selección en Cascada
+> Cliente→Proyecto→Encargado, Hipervínculos, Edición de Catálogos y Layout de Cliente (spec `035`):
+> el formulario de Ticket/Tarea unifica el flujo Cliente→Proyecto→Encargado ya usado en Tareas
+> (reemplaza el flujo "Proyecto primero" de tickets), y el permiso `tickets:manage_skills` se
+> amplía de solo Coordinador a **todo rol interno** (Admin, Coordinador, QM, Resolutor) — solo
+> Usuario/cliente queda sin poder asignar Skills; el código de ticket/tarea es un link clicable en
+> Tickets, Mis Tareas y Kanban; nuevo selector de orden real (reemplaza el indicador fijo de la
+> spec `028`); Modal "Detalle del cliente" reorganizado en columnas; y botón "Editar" en los
+> catálogos administrables (herramientas, procesos, tipos de resolución, tipo de registro, equipos,
+> tipos de acceso). Precedida por la Deshabilitación de Usuarios/Cliente y el Módulo de Reportes
+> Dinámicos (spec `034`); el cierre de 20 observaciones del Backlog UAT en 4 iteraciones
+> (`ITER-006` a `ITER-009`, specs `028`, `030`-`033`); la Fase 5 SDD V3 completa (specs `020`-`022`):
+> calendarios multi-zona horaria por Cliente/Equipo, horario laboral semanal, vacaciones/permisos
+> con doble aprobación (Jefe directo + rol RRHH), alerta de disponibilidad (sin bloquear) al
+> asignar tickets, franjas horarias globales por país y motor de SLA dinámico; por historial
+> visual de cumplimiento SLA y reasignación de resolutor con sugerencias de carga (specs
+> `023`/`024`); por Accesos y conexiones múltiples del Cliente, ampliados con catálogo de tipos y
+> credenciales múltiples (specs `018`/`031`); y por unidades de tiempo (minutos/horas/días) al
+> configurar SLA (spec `019`). Rama: `develp_Jp` — al día con `origin/develp_Jp`.
 
 ---
 
@@ -27,7 +43,7 @@ de SyWork. Construido con metodología **SDD (Spec-Driven Development)** sobre *
 | **2 — Registro de tiempos** | Registro diario de tiempos por recurso (hora inicio/fin), rol Usuario/cliente (autoservicio con Cliente fijo), breadcrumbs de navegación, Usuario/cliente seleccionable/editable por Cliente en el ticket, "Mis Tareas" (specs `004`, `005`, `006`, `007`) | ✅ **Completa** |
 | **3 — Tareas** | Tarea/Subtarea sobre la misma tabla de Ticket (jerarquía Cliente → Proyecto → Lista → Tarea → Subtarea), ciclo de vida unificado con Ticket (10 estados, transición libre + comentario), visibles en Kanban, Listas administrables tipo Teamwork/Asana, Subtareas con Usuario/cliente propio, fix de Registro de tiempo para creador de la Tarea (specs `008`, `009`) | ✅ **Completa** |
 | **4 — SLAs** | SLAs configurables por Proyecto × Prioridad, contador de 2 fases con pausa/reanudación según estado del ticket, indicadores en listado/dashboard y notificación proactiva de vencimientos vía Celery+Redis (spec `014`) | ✅ **Completa** |
-| **5 — Calendarios y disponibilidad** | Calendarios multi-zona horaria por Cliente/Equipo, festivos por país sincronizados por API pública y categorizados (Oficial/Regional), horario laboral semanal, vacaciones/permisos con doble aprobación (Jefe directo + RRHH), cumpleaños del equipo y alerta de disponibilidad (sin bloquear) al asignar tickets (specs `020`, `021`) | ✅ **Completa** |
+| **5 — Calendarios y disponibilidad** | Calendarios multi-zona horaria por Cliente/Equipo, festivos por país sincronizados por API pública y categorizados (Oficial/Regional), horario laboral semanal, vacaciones/permisos con doble aprobación (Jefe directo + RRHH), cumpleaños del equipo, alerta de disponibilidad (sin bloquear) al asignar tickets, franjas horarias globales por país (herencia + modo Personalizado) y motor de SLA dinámico basado en disponibilidad real (specs `020`, `021`, `022`) | ✅ **Completa** |
 | 6 | Motor FSM automatizado + triggers de comentarios + Google Chat | ⏳ Pendiente |
 | 7 | Focus Room + agente IA asistente (evaluar Triage Agent) | ⏳ Pendiente |
 | 8 | Portal de clientes + integraciones + tickets por email | ⏳ Pendiente |
@@ -44,15 +60,69 @@ Fuentes de verdad: `docs/SDD V3.docx` (roadmap y alcances) y
 > El Usuario/cliente en múltiples Proyectos y la corrección de su Cliente (specs `015`/`016`), el
 > contenido enriquecido en tickets/comentarios (spec `017`), los accesos y conexiones múltiples
 > del Cliente (spec `018`) y las unidades de tiempo del SLA (spec `019`) son cambios transversales
-> posteriores a la Fase 4, previos a la Fase 5 (Calendarios y disponibilidad, specs `020`/`021`)
-> ya completada arriba.
+> posteriores a la Fase 4, previos a la Fase 5 (Calendarios y disponibilidad, specs `020`/`021`/
+> `022`) ya completada arriba.
+>
+> Los cambios posteriores a la Fase 5 son: el indicador visual de cumplimiento SLA por cambio de
+> estado y la reasignación de resolutor con registro visible (spec `023`), sugerencias de
+> carga/disponibilidad al reasignar — igual que en la asignación inicial (spec `024`); el Manual
+> de Usuario integral (spec `025`); seeders de datos reales — Clientes Aris/Vaxthera con sus
+> proyectos y SLA (spec `026`) y usuarios adicionales por rol con Resolutores con Skills (spec
+> `029`); entornos Docker aislados Test/Producción en el mismo host (spec `027`); el cierre de 20
+> observaciones del Backlog UAT en 4 iteraciones — `ITER-004`/`ITER-005` (spec `028`), `ITER-007`
+> (spec `030`), `ITER-006` (spec `031`), `ITER-009` (spec `032`) e `ITER-008` (spec `033`); la
+> Deshabilitación de Usuarios/Cliente y el Módulo de Reportes Dinámicos (spec `034`); la
+> Cascada Cliente→Proyecto→Encargado, hipervínculos, edición de catálogos y layout de Cliente
+> (spec `035`); la herencia de Subtareas, vínculo bidireccional y fix de scroll (spec `036`); y
+> las Subtareas visibles en Clasificación de la Tarea principal (spec `037`, fase activa actual).
 
 ---
 
-## Estado actual — Fase 1 (Tickets) + Fase 2 (Tiempos) + Fase 3 (Tareas) + Personal/Skills (spec `010`) + Cronómetro (spec `012`) + Manejo global de errores (spec `013`) + SLAs (spec `014`, Fase 4) + Usuario/cliente multi-Proyecto (spec `015`/`016`) + Contenido enriquecido (spec `017`) + Accesos del Cliente (spec `018`) + Unidades de tiempo SLA (spec `019`) + Calendarios/Vacaciones/Disponibilidad (spec `020`, Fase 5) + Festivos por API y cumpleaños (spec `021`)
+## Estado actual — Fase 1 (Tickets) + Fase 2 (Tiempos) + Fase 3 (Tareas) + Personal/Skills (spec `010`) + Cronómetro (spec `012`) + Manejo global de errores (spec `013`) + SLAs (spec `014`, Fase 4) + Usuario/cliente multi-Proyecto (spec `015`/`016`) + Contenido enriquecido (spec `017`) + Accesos del Cliente (spec `018`/`031`) + Unidades de tiempo SLA (spec `019`) + Calendarios/Vacaciones/Disponibilidad/RRHH/SLA dinámico (specs `020`-`022`, Fase 5) + Historial SLA y reasignación (spec `023`/`024`) + Cierre de Backlog UAT ITER-004 a ITER-009 (specs `028`, `030`-`033`) + Usuarios inactivos y Reportes Dinámicos (spec `034`) + Cascada Cliente-Proyecto-Encargado, hipervínculos y catálogos editables (spec `035`) + Herencia de Subtareas y vínculo bidireccional (spec `036`) + Subtareas en Clasificación (spec `037`)
 
 ### Funcionalidad operativa
 
+- **Subtareas en Clasificación de la Tarea principal** (spec `037`, fase activa): la Card
+  "Clasificación" del detalle de una Tarea (sin Tarea padre propia) agrega el ítem "Subtareas",
+  justo después de "Tarea Padre" (spec `036`), listando cada Subtarea como hipervínculo o
+  mostrando "Sin subtareas"; aditivo, no reemplaza la tarjeta lateral "Subtareas (N)" que ya
+  lista/crea Subtareas. Sin cambios de backend — reutiliza `subtasks`, ya expuesto por
+  `_ticket_detail` desde la spec `009`.
+- **Herencia de Subtareas, vínculo bidireccional y fix de scroll** (spec `036`): al crear una
+  Subtarea desde una Tarea padre, hereda automáticamente su Nivel de escalamiento, su Usuario/
+  cliente solicitante y el set completo de sus Skills requeridas (editables después de forma
+  independiente, sin re-sincronizarse retroactivamente); el detalle de la Subtarea muestra
+  "Tarea Padre" como hipervínculo (campo aditivo `parent` en `_ticket_detail`). Corrige además un
+  parpadeo del panel izquierdo del detalle del Ticket: el listener de scroll que colapsa/expande
+  el resumen de tiempo alternaba su estado en cada micro-oscilación (rubber-band/trackpad) sin
+  histéresis — se agrega una zona muerta de 12px + throttle por `requestAnimationFrame`, sin
+  tocar el `position: sticky` del sidebar (spec `030`).
+- **Selección en Cascada, Hipervínculos, Catálogos y Layout de Cliente** (spec `035`): el
+  formulario de Ticket/Tarea usa el mismo flujo Cliente→Proyecto→Encargado que ya
+  tenían las Tareas (antes Tickets exigía elegir Proyecto primero, con Cliente auto-derivado
+  deshabilitado); el permiso `tickets:manage_skills` pasa de solo Coordinador a **todo rol
+  interno** (Admin, Coordinador, QM, Resolutor); el código de ticket/tarea es un link clicable en
+  Tickets, Mis Tareas y el tablero Kanban (preserva filtros/orden al volver); nuevo selector de
+  orden real en Tickets y Mis Tareas (reemplaza el indicador fijo `SortIndicator`, que ahora
+  también soporta `code`/`-code`/`-status`); el Modal "Detalle del cliente" se reorganiza en
+  columnas responsive; y los catálogos administrables (herramientas, procesos, tipos de
+  resolución, tipo de registro, equipos, tipos de acceso) ganan un botón "Editar" (`PATCH
+  /api/catalogs/{catalog}/{item_id}`, mismo permiso `catalogs:create` ya existente).
+- **Cierre de 20 observaciones del Backlog UAT** (`ITER-004` a `ITER-009`, specs `028`, `030`-
+  `033`): motor de SLA calendario-consciente en todo recálculo, cronómetro que bloquea al cerrar
+  el ticket, validación de título, franjas horarias visibles en el calendario de un recurso,
+  registro de tiempo "fuera de jornada"; layout del Detalle del Ticket reorganizado y Cliente
+  visible en SLA Configurable para desambiguar proyectos homónimos; catálogo administrable de
+  tipos de acceso con credenciales múltiples, puerto/ambiente propio y adjunto por acceso puntual
+  del Cliente; toasts de antd v5 restaurados (envolvían la app sin `<App>`), Pre-Análisis con
+  candidatos QM, Proyecto/Usuario-cliente obligatorios al crear un Ticket con SLA aplicable
+  visible, sugerencia Herramienta↔Proceso↔Skills, y congelamiento del resultado de SLA de
+  Ejecución; corrección de hora desfasada en el historial de tiempo, notificación al reasignar y
+  bloqueo de asignar/reasignar a un resolutor con cuenta de usuario desactivada.
+- **RRHH y SLA dinámico** (spec `022`, extensión de Fase 5): franjas horarias globales por país
+  con herencia y modo Personalizado por Recurso, calendario de equipo superpuesto (Mes/Semana/Día,
+  ausencias parciales por horas) y motor de SLA que calcula sobre la disponibilidad real del
+  recurso asignado.
 - **Deshabilitación de Usuario/cliente y Módulo de Reportes** (spec `034`): desde
   "Usuarios/cliente" (Maestros), Coordinador/Admin activan o desactivan la cuenta de un
   Usuario/cliente — deshabilitada no puede iniciar sesión ni ser elegida en nuevas asignaciones
@@ -243,7 +313,7 @@ Fuentes de verdad: `docs/SDD V3.docx` (roadmap y alcances) y
 ### Backend
 - **Python 3.12** + **Flask 3.x** + **Flask-RESTX** (Swagger en `/swagger`)
 - **python-transitions** (FSM del ciclo de vida — Capa 1, dominio puro)
-- **SQLAlchemy 2.x** + **Alembic** (revisión `040` — dueño único del schema)
+- **SQLAlchemy 2.x** + **Alembic** (revisión `051` — dueño único del schema)
 - **PostgreSQL 16** on-premise con RLS y pgcrypto
 - **Flask-JWT-Extended** + login provisional usuario/contraseña + **Google OAuth2** (`@sywork.net`)
 - **Celery 5.4** + **Redis 5.2**: tarea periódica de vencimientos de SLA (spec `014`) y
@@ -286,7 +356,7 @@ backend/
 │   │                  # calendar_model — festivos/horarios/ausencias, spec 020/021)
 │   ├── repositories/  # paginación, filtros, historiales append-only, calendar_repo
 │   ├── storage/       # adjuntos en filesystem (uploads/tickets/{id}/)
-│   └── migrations/    # Alembic 001..040
+│   └── migrations/    # Alembic 001..051
 ├── workers/           # celery_app.py, sla_tasks.py (spec 014), holiday_sync_tasks.py (spec 021)
 └── api/               # Capa 3
     ├── middleware/    # auth.py (JWT + usuario activo), rbac.py (@require_permission)
@@ -375,7 +445,7 @@ Esto construye las imágenes y arranca, en orden:
 
 1. **`sywork_db`** (Postgres 16) — espera a estar `healthy` antes de continuar.
 2. **`sywork_backend`** (Flask) — corre `alembic upgrade head` automáticamente al iniciar
-   (revisión `040`) y luego levanta el servidor en `:5000`.
+   (revisión `051`) y luego levanta el servidor en `:5000`.
 3. **`sywork_frontend`** (Vite) — sirve la SPA en `:5173`.
 4. **`sywork_redis`** — broker de Celery.
 5. **`sywork_worker`** (Celery) — vencimientos de SLA (spec `014`) y sincronización periódica
@@ -581,7 +651,7 @@ docker exec sywork_backend python -m backend.scripts.seed_tickets 500   # datos 
 | `008` | [fase3-tareas](specs/008-fase3-tareas/spec.md) | Tarea sobre la misma tabla de Ticket, campo "Tipo de registro"; decisiones de Lista texto libre y FSM propia reemplazadas por la spec `009` | ✅ Completa — tasks 31/31 |
 | `009` | [tareas-listas-subtareas](specs/009-tareas-listas-subtareas/spec.md) | Listas administrables, Subtareas, ciclo de vida unificado con Ticket (10 estados, transición libre) y fix de Registro de tiempo | ✅ Completa — tasks 45/45, suite 332/332 |
 | `010` | [proyecto-personal-skills](specs/010-proyecto-personal-skills/spec.md) | Renombre Encargado → Usuario/cliente, vínculo al Proyecto (en vez del Cliente), Personal del Proyecto + "Equipo" estilo Teamwork, Skills con tipo/herramienta/proceso y semillas | ✅ Completa — tasks 35/35, tests dirigidos en verde (suite completa no corrida, FR-020) |
-| `011` | [ticket-skills-requeridas](specs/011-ticket-skills-requeridas/spec.md) | Skills opcionales en el ticket para identificar habilidades necesarias para resolverlo | ⏳ Spec lista, sin plan/tasks |
+| `011` | [ticket-skills-requeridas](specs/011-ticket-skills-requeridas/spec.md) | Skills opcionales en el ticket para identificar habilidades necesarias para resolverlo | ✅ Completa — tasks 21/21 |
 | `012` | [cronometro-manual-ticket](specs/012-cronometro-manual-ticket/spec.md) | Cronómetro manual de tiempo (provisional) en el detalle del ticket: iniciar/pausar/reanudar/terminar por recurso, genera Registro de tiempo formal | ✅ Completa — tasks 21/21, 24/24 tests, validado E2E en navegador |
 | `013` | [manejo-errores-notificaciones](specs/013-manejo-errores-notificaciones/spec.md) | Normalizador global de errores de la API (`{success,message,code}`) + notificaciones toast en el frontend | ✅ Completa |
 | `014` | [sla-tickets-tareas](specs/014-sla-tickets-tareas/spec.md) | SLAs configurables por Proyecto × Prioridad, contador de 2 fases, indicadores agregados y notificación proactiva de vencimientos vía Celery+Redis (Fase 4 SDD V3) | ✅ Completa — tasks 30/30, 63 tests dirigidos, suite 437/437, quickstart 3/3 validado contra Docker real |
@@ -592,7 +662,22 @@ docker exec sywork_backend python -m backend.scripts.seed_tickets 500   # datos 
 | `019` | [sla-unidades-tiempo](specs/019-sla-unidades-tiempo/spec.md) | Selector de unidad (minutos/horas/días) en el tiempo límite de Diagnóstico/Análisis/Ejecución del SLA, con conversión interna a minutos | ✅ Completa — tasks 11/11 |
 | `020` | [calendarios-vacaciones-disponibilidad](specs/020-calendarios-vacaciones-disponibilidad/spec.md) | Fase 5 SDD V3: calendarios multi-zona horaria, festivos por país, horario laboral semanal, vacaciones/permisos con doble aprobación (Jefe directo + RRHH) y alerta de disponibilidad al asignar tickets | ✅ Completa — tasks 52/52 (7 fases) |
 | `021` | [festivos-api-cumpleanos](specs/021-festivos-api-cumpleanos/spec.md) | Festivos oficiales sincronizados por API pública (Nager.Date), categorización Oficial/Regional con color propio, y cumpleaños de Recursos en la pestaña "Equipo" del calendario | ✅ Completa — tasks 27/27 (6 fases) |
+| `022` | [rrhh-calendario-sla-dinamico](specs/022-rrhh-calendario-sla-dinamico/spec.md) | Franjas horarias globales por país (herencia + modo Personalizado), calendario de equipo superpuesto (Mes/Semana/Día) y motor de SLA dinámico basado en disponibilidad real | ✅ Completa — tasks 51/51 |
+| `023` | [historial-sla-reasignacion](specs/023-historial-sla-reasignacion/spec.md) | Tiempo transcurrido e indicador de cumplimiento SLA (✅/⚠️/❌) por cambio de estado, y reasignación de resolutor con registro visible | ✅ Completa — tasks 22/22 |
+| `024` | [reasignacion-sugerencias-carga](specs/024-reasignacion-sugerencias-carga/spec.md) | El selector de nuevo resolutor en "Reasignar" muestra carga de trabajo, orden por menor carga y etiqueta de no disponibilidad, igual que la asignación inicial | ✅ Completa — tasks 9/9 |
+| `025` | [manual-usuario-integral](specs/025-manual-usuario-integral/spec.md) | Manual de Usuario ampliado a toda la app (v3.2): resumen arquitectónico, diagramas Mermaid y guía de las 12 áreas de pantallas | ✅ Completa (entregable documental, verificado contra la app real en Docker) |
+| `026` | [seed-clientes-proyectos](specs/026-seed-clientes-proyectos/spec.md) | Script semilla idempotente con datos reales de Clientes Aris y Vaxthera (proyectos, SLA, Usuarios/cliente, Listas de Tareas) | 🚧 En curso — 23/25 tareas, pendientes 2 de verificación |
+| `027` | [docker-entornos-aislados](specs/027-docker-entornos-aislados/spec.md) | Un mismo `docker-compose.yml` parametrizado corre Test y Producción en paralelo en el mismo host, aislados por puertos/nombre de proyecto/`.env` | ✅ Completa — tasks 17/17 |
+| `028` | [cierre-backlog-uat-abierto](specs/028-cierre-backlog-uat-abierto/spec.md) | Cierre de 12 observaciones "Abierta" del Backlog UAT (`ITER-004`/`ITER-005`): SLA calendario-consciente, cronómetro que bloquea al cerrar, validación de título, franjas horarias en el calendario del recurso, registro "fuera de jornada" | ✅ Completa — tasks 33/33 |
+| `029` | [seed-usuarios-roles-skills](specs/029-seed-usuarios-roles-skills/spec.md) | Usuarios adicionales por rol interno, mínimo 4 Resolutores con Skills asignadas y verificación de zona horaria de Clientes semilla | ✅ Completa — tasks 13/13 |
+| `030` | [cierre-obs-0042-0043](specs/030-cierre-obs-0042-0043/spec.md) | Reorganiza el layout del Detalle del Ticket (scroll interno del historial de comentarios) y expone el Cliente del proyecto en SLA Configurable para desambiguar proyectos homónimos (`ITER-007`) | ✅ Completa — tasks 14/14 |
+| `031` | [cliente-accesos-ampliado](specs/031-cliente-accesos-ampliado/spec.md) | Catálogo administrable de tipos de acceso del Cliente, credenciales múltiples por acceso, puerto/ambiente propio y adjunto anclado a un acceso puntual (cierra OBS-0041, `ITER-006`) | ✅ Completa — tasks 29/29 |
+| `032` | [cierre-obs-0060-0063](specs/032-cierre-obs-0060-0063/spec.md) | Fix de hora desfasada en historial de registro de tiempo, reubicación de etiqueta "Fuera de jornada", notificación al reasignar y bloqueo de asignar a resolutor con cuenta desactivada (`ITER-009`) | ✅ Completa — tasks 22/22 |
+| `033` | [cierre-obs-0044-0059](specs/033-cierre-obs-0044-0059/spec.md) | Cierre de 16 observaciones del barrido E2E de Emilio Vargas (`ITER-008`): toasts antd v5, cronómetro por perfil, candidatos QM en Pre-Análisis, Proyecto/Usuario-cliente obligatorios con SLA visible, sugerencia Herramienta↔Proceso↔Skills, SLA de Ejecución congelado | ✅ Completa — commit `18ba726` |
 | `034` | [usuarios-inactivos-reportes-grid](specs/034-usuarios-inactivos-reportes-grid/spec.md) | Estado Activo/Inactivo para cuentas Usuario/cliente (bloquea login y nuevas asignaciones) y Módulo de Reportes Dinámicos (grid interactivo con columnas configurables, filtros, agregaciones, exportación a Excel y Vistas Personalizadas) | ✅ Completa — tasks 34/34, validado contra Docker real |
+| `035` | [cascada-links-catalogos-cliente](specs/035-cascada-links-catalogos-cliente/spec.md) | Flujo Cliente→Proyecto→Encargado en el formulario de Ticket/Tarea, permiso `tickets:manage_skills` para todo rol interno, código de ticket/tarea como link clicable, selector de orden real y edición de catálogos administrables | ✅ Completa — tasks 29/29, validado contra Docker real |
+| `036` | [herencia-subtareas-scroll](specs/036-herencia-subtareas-scroll/spec.md) | Herencia de Nivel de escalamiento/Usuario-cliente/Skills al crear una Subtarea desde su Tarea padre, hipervínculo "Tarea Padre" en la Subtarea y fix de parpadeo por histéresis en el scroll del detalle del Ticket | ✅ Completa — tasks 17/17, validado contra Docker real |
+| `037` | [subtareas-en-clasificacion](specs/037-subtareas-en-clasificacion/spec.md) | Ítem "Subtareas" en la Card "Clasificación" del detalle de la Tarea principal, listando cada Subtarea como hipervínculo | ✅ Completa — tasks 4/4, validado contra Docker real |
 
 Cada carpeta de spec sigue la misma estructura: `spec.md`, `plan.md`, `research.md`,
 `data-model.md`, `contracts/`, `tasks.md`, `quickstart.md`.
@@ -608,13 +693,17 @@ Cada carpeta de spec sigue la misma estructura: `spec.md`, `plan.md`, `research.
   frontend (T071).
 - El cifrado pgcrypto es placeholder de desarrollo → reemplazar por `pgp_sym_encrypt`
   antes de producción.
-- Fase 6 (motor FSM automatizado + triggers de comentarios + Google Chat) y siguientes del
-  roadmap SDD V3 (Fases 7-8) aún no iniciadas.
 - Spec `010`: correr la suite completa de tests (no ejecutada durante el desarrollo por
   directriz explícita FR-020) para confirmar ausencia de regresiones fuera de los archivos
   tocados.
 - Spec `014` (SLAs): FR-011 (recalcular SLA al cambiar el Proyecto de un ticket) solo es
   parcialmente alcanzable — `project_id` no está hoy en los campos editables (`PATCHABLE_FIELDS`)
   de ningún endpoint, así que solo el cambio de Prioridad ejercita esa lógica en producción.
-- Spec `011` (Skills requeridas en el ticket): la spec quedó redactada pero sin `plan.md`/
-  `tasks.md` — no implementada aún.
+- Spec `026` (seed Aris/Vaxthera): 23/25 tareas — quedan 2 tareas de verificación manual sin
+  cerrar.
+- Specs `033`/`034`/`035`: implementadas y committeadas, pendiente el retest formal por el
+  consultor UAT dueño de las observaciones que cada una cierra.
+- Spec `037`: implementada, validada y committeada (`beecdec`) — pendiente confirmar que el
+  usuario que reportó el caso original considera cerrada la observación.
+- Fase 6 (motor FSM automatizado + triggers de comentarios + Google Chat) y siguientes del
+  roadmap SDD V3 (Fases 7-8) aún no iniciadas.

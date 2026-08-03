@@ -204,6 +204,8 @@ export interface TicketDetail extends TicketListItem {
   reassignments: TicketReassignment[]
   /** Subtareas (Nivel 5) de esta Tarea — vacío para Ticket y para Subtarea (spec 009). */
   subtasks: TicketListItem[]
+  /** Resumen navegable de la Tarea padre (spec 036) — `null` salvo que este registro sea una Subtarea. */
+  parent: { id: string; ticket_number: string; title: string } | null
   /** Skills requeridas para resolverlo, opcional y editable en cualquier estado (spec 011). */
   skills: TicketSkillRef[]
   /** Estado de SLA (Fase 4, spec 014) — 'sin_sla' para Tareas/Subtareas (FR-012). */

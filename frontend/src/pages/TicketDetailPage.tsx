@@ -87,11 +87,24 @@ export default function TicketDetailPage() {
 
   useEffect(() => {
     let lastY = window.scrollY
+    let ticking = false
+    // Zona muerta: sin ella, micro-oscilaciones de scroll (rubber-band/trackpad) alternan
+    // `timeExpanded` en sucesión rápida, cambiando la altura de "Registros de tiempo" y
+    // empujando visualmente "Clasificación"/"Historial de estados" — el parpadeo reportado.
+    const DEAD_ZONE = 12
     const onScroll = () => {
-      const y = window.scrollY
-      if (y > lastY && y > 80) setTimeExpanded(false)
-      else if (y < lastY) setTimeExpanded(true)
-      lastY = y
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        const y = window.scrollY
+        const delta = y - lastY
+        if (Math.abs(delta) > DEAD_ZONE) {
+          if (delta > 0 && y > 80) setTimeExpanded(false)
+          else if (delta < 0) setTimeExpanded(true)
+          lastY = y
+        }
+        ticking = false
+      })
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -282,6 +295,30 @@ export default function TicketDetailPage() {
                         value={listId} onChange={setListId}
                         options={projectTaskLists.map(l => ({ value: l.id, label: l.name }))} />
                     : (ticket.list_name || <em style={{ color: palette.slate400 }}>Sin lista</em>)}
+                </Descriptions.Item>
+              )}
+              {ticket.parent && (
+                <Descriptions.Item label="Tarea Padre">
+                  <Button type="link" size="small" style={{ padding: 0, height: 'auto' }}
+                    onClick={() => navigate(`/tickets/${ticket.parent!.id}`)}>
+                    {ticket.parent.ticket_number} — {ticket.parent.title}
+                  </Button>
+                </Descriptions.Item>
+              )}
+              {isTask && !isSubtask && (
+                <Descriptions.Item label="Subtareas">
+                  {ticket.subtasks.length === 0 ? (
+                    <em style={{ color: palette.slate400 }}>Sin subtareas</em>
+                  ) : (
+                    <Space direction="vertical" size={2}>
+                      {ticket.subtasks.map(s => (
+                        <Button key={s.id} type="link" size="small" style={{ padding: 0, height: 'auto' }}
+                          onClick={() => navigate(`/tickets/${s.id}`)}>
+                          {s.ticket_number} — {s.title}
+                        </Button>
+                      ))}
+                    </Space>
+                  )}
                 </Descriptions.Item>
               )}
               <Descriptions.Item label="Proyecto">{ticket.project?.name ?? '—'}</Descriptions.Item>
@@ -499,7 +536,7 @@ export default function TicketDetailPage() {
           {isTask && !isSubtask && (
             <Card
               size="small"
-              title={<span><UnorderedListOutlined style={{ color: palette.slate400, marginRight: 8 }} />Subtareas</span>}
+              title={<span><UnorderedListOutlined style={{ color: palette.slate400, marginRight: 8 }} />Subtareas ({ticket.subtasks.length})</span>}
               style={{ marginTop: 16, borderColor: palette.slate200, background: palette.slate50 }}
             >
               <SubtaskList ticket={ticket} onUpdated={load} />
